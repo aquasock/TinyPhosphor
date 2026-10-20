@@ -27,3 +27,33 @@ None.
 - User Test: N/A
 
 ---
+
+## 2 COMMIT Unreleased 2026-10-20T12:13:02-07:00
+
+#### Coming From:
+
+Unreleased c2adfd2
+
+#### Purpose:
+
+Update `.ai/core-reference.md` for TinyPhosphor's open-flow build while preserving the inherited Tang-Phosphor records.
+
+#### Outcome:
+
+The reference is now titled for TinyPhosphor and states that entries headed `Tang-Phosphor use` are inherited implementation context, with new decisions labelled `TinyPhosphor use`. A new `Open FPGA Flow and Toolchain` section records the `read_slang` front end and its `-U SYNTHESIS -D GW_IDE` requirement, the `-v` plus `--blackboxed-module` primitive rule and the `specify`-block shim, the PLL string-parameter restoration needed before `gowin_pack`, the fork's GW5AST-138C device database and its non-redistributable provenance, the measured clock rules from TinyNES, Tiny89 and TinyTang (right-edge PLL sites, `SPINE17` avoidance, the `SPINE26 <= CBRIDGEOUT_BOTTOM2` pixel bridge, `GB10` for the AE350 bus and the dedicated `AE350_CORE_CLK_PLLR0` hop), the placement and block-RAM gates (8 to 16 seeds, single-clock 9-bit video RAM), the HDMI clock-lane and thermal rule, and the scratch player-core synthesis baseline at Tang-Phosphor `c261fcb`. The revision-C record gained the open-flow `--device` and `-d` invocation, and the GowinSynthesis record gained the note that `syn_srlstyle` does not exist in this build, so synchronizers must be checked in the routed netlist. No hardware was built or deployed; this was a documentation-only cycle. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 2 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Import the Tang-Phosphor player sources at a pinned commit and add the open-flow build scripts described by the new reference section, then create the player-only top without AE350 or DDR3 and run the first synthesis and seed sweep. The two read_slang findings and the stale `build.tcl` file list remain the first import tasks, and no board result exists yet.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: N/A
+
+---

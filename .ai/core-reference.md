@@ -1,8 +1,74 @@
-# Tang-Phosphor Standards Reference
+# TinyPhosphor Standards Reference
 
 This file records the external standards and primary technical references used
-for implementation decisions. A reference entry does not expand the project's
-supported profile. Project-specific limits remain implementation limits.
+for TinyPhosphor's implementation decisions. A reference entry does not expand
+the project's supported profile. Project-specific limits remain implementation
+limits.
+
+Entries headed `Tang-Phosphor use` are inherited implementation context from
+the Tang-Phosphor design TinyPhosphor ports. They remain authoritative for the
+inherited RTL unless a later entry or a `TinyPhosphor use` line supersedes
+them. New TinyPhosphor decisions are labelled `TinyPhosphor use`.
+
+---
+
+## Open FPGA Flow and Toolchain
+
+### Yosys and the `read_slang` front end
+
+- Sources: YosysHQ Yosys, https://github.com/YosysHQ/yosys; Mike Popoloski's slang, https://github.com/MikePopoloski/slang; local `read_slang --help` in oss-cad-suite Yosys 0.69+260.
+- Authority: Tool documentation and observed behavior on the inherited Tang-Phosphor sources.
+- Relevant rule: `read_slang` accepts SystemVerilog 1800-2017 that Yosys's classic `read_verilog` front end rejects, including `input reg` ports and unpacked-array ports. `read_slang` defines `SYNTHESIS` implicitly, so pass `-U SYNTHESIS -D GW_IDE` to select the Gowin `OSER10` branch in the HDMI serializer instead of the Xilinx `OSERDESE2` branch.
+- TinyPhosphor use: Synthesise the imported player sources with `read_slang --std 1800-2017 -U SYNTHESIS -D GW_IDE --allow-use-before-declare --allow-lib-module-redef`; do not rewrite array ports merely to satisfy `read_verilog`.
+
+### Gowin cell-library visibility and blackboxing
+
+- Sources: Yosys `read_slang` and `read_verilog` semantics; TinyTang `tools/desktop_open/synth.sh` and `synth.ys`.
+- Authority: Tool semantics plus a measured failure mode on this device.
+- Relevant rule: `-v` makes cell-library modules visible but not instantiated. Every primitive the design instantiates must also be named with `--blackboxed-module`, or the instance is dropped silently and the netlist can collapse to a near-empty shell. `cells_sim.v` also contains `specify` blocks that slang rejects.
+- TinyPhosphor use: Strip `specify`/`endspecify` regions into a shim, pass `cells_sim.v` and `cells_xtra_gw5a.v` with `-v`, and derive the `--blackboxed-module` list from the design sources rather than maintaining it by hand.
+
+### `read_slang` string parameters reach `gowin_pack` as bit vectors
+
+- Sources: TinyTang `tools/desktop_open/synth.sh`; measured on the `clock-smoke` design with `synth_gowin`.
+- Authority: Measured netlist behavior.
+- Relevant rule: `read_slang` keeps a Verilog string parameter as a bit vector, so `FCLKIN = "50"` and `CLKOUT0_EN = "TRUE"` arrive as ASCII bits; `gowin_pack` expects strings and rejects the bit patterns.
+- TinyPhosphor use: After synthesis and before packing, restore string parameters on `PLL`, `PLLA`, `rPLL` and `PLLVR` cells only; a whole-netlist conversion can corrupt LUT `INIT` values that happen to decode as printable ASCII.
+
+### GW5AST-138C open-flow device database
+
+- Sources: TinyTang `BUILDING.md` and `tools/desktop_open/pnr.sh`; TinyNES `tools/build_ae350_uart.sh` and README; local `apicula-mathieufro` branch `epic/gw5ast138c` with `apycula/GW5AST-138C.msgpack.xz`, and `tools/nextpnr-mathieufro/nextpnr-himbaechel`.
+- Authority: Measured local toolchain; Gowin EDA 1.9.11.03 supplies the device data.
+- Relevant rule: The published GW5AST-138C database in oss-cad-suite has no PLL site and no clock pips for this part, so it cannot place a design with a PLL. The fork's database is generated from Gowin's local device files and cannot be redistributed. A database generated differently can change timing and routing for byte-identical source.
+- TinyPhosphor use: Build against the fork's nextpnr and Apicula, pin the database digest, and keep Gowin EDA out of the synthesis and place-and-route path; it is needed only to regenerate the database.
+
+### Open-flow clock rules on GW5AST-138C
+
+- Sources: TinyNES `.ai/core-log.md` entries 2-6, 13-14 and 22-28; Tiny89 `docs/tiny89-soc.md` and `tools/build-tiny89-soc.sh`; TinyTang `docs/clock-tree-inventory.md`.
+- Authority: Hardware measurements on this board and package.
+- Relevant rule: Left-side `TLPLL0CLK0` can leave a design dead while right-side `TRPLL0CLK0` runs it. Keep the main and HDMI PLLs on the right edge, with the HDMI serial-clock PLL at `PLL_R[3]` and its 27 MHz reference at `PLL_R[1]`. Avoid `SPINE17`; hold clock-select ports at VSS and keep logic out of the select tiles. For the TinyNES/Tiny89 measured baseline, the pixel clock reaches the spines only through `SPINE26 <= CBRIDGEOUT_BOTTOM2`. An AE350 bus clock must take `GB10`, not `GB20`, and the A25 core clock must use the dedicated `AE350_CORE_CLK_PLLR0` hop.
+- TinyPhosphor use: Gate candidate placements on the routed clock topology, not only on timing. Keep PLL site assignments in the constraint file and re-run the gate after any netlist change.
+
+### Open-flow placement and block-RAM rules
+
+- Sources: TinyNES `.ai/core-log.md` entries 4-6, 13-14 and 24-27; Tiny89 `tools/build-tiny89-soc.sh`.
+- Authority: Hardware measurements and seed sweeps on this board.
+- Relevant rule: Placement decides hold margin and clock routing, and nextpnr is not placement-driven by timing here; changing a constraint can produce byte-identical routing. Two-clock block RAM reads back wrong in the open flow on this chip, and video block RAMs must use a 9-bit mode. A timing-clean placement can still load with a dead clock.
+- TinyPhosphor use: Synthesise once, place and route 8 to 16 seeds, rank by pixel-clock hold violations, then dedicated-route fallbacks, then margin on both clocks, and pack only a seed that passes every gate. Every video block RAM must have `CLKA == CLKB` and a 9-bit mode.
+
+### HDMI clock lane and thermal rule
+
+- Sources: TinyNES `.ai/core-log.md` entries 22-27 and README.
+- Authority: Hardware measurement from 31 C to 69.8 C with both PMOD sockets loaded.
+- Relevant rule: At `PLL_L[3]` the 371.25 MHz serial clock crossed the die on 9.86 ns of general routing and the picture broke up once the package reached about 41 C; at `PLL_R[3]` the route is 2.12 ns and the picture held clean. The TMDS clock lane is serialised through a fourth `OSER10` with `1111100000` per pixel, not driven directly from the pixel clock.
+- TinyPhosphor use: Adopt the right-edge PLL and serialised clock lane in the imported HDMI path. nextpnr does not time I/O, IOLOGIC or PLLs, so inspect that stage with `--sdf` and a timing script rather than trusting the Fmax report.
+
+### Tang-Phosphor player-core open-flow baseline
+
+- Sources: Scratch synthesis against Tang-Phosphor `c261fcb` on 2026-10-20, using `read_slang` and `synth_gowin -family gw5a` with a zero-driving `ae350_subsystem` stub.
+- Authority: Synthesis measurement, not a hardware qualification.
+- Relevant behavior: The player tree elaborates unchanged under `read_slang`. After correcting two mixed blocking and non-blocking assignments in `src/hdmi/hdmi.sv` (`control_data`) and `src/hdmi/packet_picker.sv` (`frame_counter`), synthesis produced about 9,200 LUTs, 3,200 ALUs, 5,900 flip-flops, 34 DPB, 7 DPX9B/SDPX9B and 5 PLLs. All inferred DPB, DPX9B and SDPX9B block RAMs had both ports on one clock; the 34 DPBs are in 4-bit mode and need review against the 9-bit rule.
+- TinyPhosphor use: Treat area as non-critical and placement and clocking as the risk. The first target excludes the AE350 and DDR3; a later AE350 target must replace Gowin's DDR3 IP with the dock's J9 SDRAM or keep decoding on the BL616.
 
 ---
 
@@ -107,6 +173,7 @@ supported profile. Project-specific limits remain implementation limits.
 - Authority: Sipeed board-vendor documentation plus a user photograph of the installed device, 2026-09-28.
 - Relevant rule: The device revision is the fifth character of the package's second marking line. The installed device is marked `GW5AST-LV138PG484AC1/I0`, `2518CA0N`, `TS0E44.00`, so it is revision C. Sipeed's generated DDR3 IP targets revision C, and its README directs revision-B users to regenerate all Gowin IP.
 - Tang-Phosphor use: Build for revision C (`set_device -name GW5AST-138C GW5AST-LV138PG484AC1/I0`) and generate all new Gowin IP for revision C. Tang-Phosphor artifacts through entry 18 were built for revision B; every build from entry 20 targets revision C. The committed `src/pll/` wrappers were generated for revision B but instantiate the same `PLL` primitive with the same parameter set as Gowin 1.9.11.03's revision-C generator output, and place-and-route accepted them for revision C.
+- TinyPhosphor use: Keep the same revision-C part and family; the open-flow build passes `--device GW5AST-LV138PG484AC1/I0` to nextpnr and `-d GW5AST-138C` to `gowin_pack`, with no `set_device` step.
 
 ---
 
@@ -119,6 +186,7 @@ supported profile. Project-specific limits remain implementation limits.
 - Relevant rule: GowinSynthesis infers shift registers by size and may implement them in SSRAM, BSRAM, or registers; `/* synthesis syn_srlstyle = "registers" */` on a register forces flip-flops.
 - Observed behavior: For revision C, GowinSynthesis 1.9.11.03 folded the two-stage `joy_usb*_meta`/`controller_status_meta` synchronizers and the AE350 smoke reference-count synchronizer into SSRAM shift registers. The first stage then had no metastability protection, and because `get_regs` does not match SSRAM cells the SDC first-stage false path no longer applied, producing cross-clock setup and hold failures in every placement.
 - Tang-Phosphor use: Mark every stage of every clock-domain synchronizer with `syn_srlstyle = "registers"`, and confirm after each build that no timing path ends at an SSRAM `DI` pin of a synchronizer.
+- TinyPhosphor use: GowinSynthesis is not in the open-flow build, so `syn_srlstyle` is not applied. Keep synchronizers as explicit flip-flop chains that Yosys maps to registers, and check the routed netlist for the first stage rather than assuming the attribute carried over.
 
 ---
 
