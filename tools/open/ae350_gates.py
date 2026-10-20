@@ -55,7 +55,12 @@ def main(routed_path, timing_path, log_path):
 
     print("== timing ==")
     fmax = timing.get("fmax", {})
-    bus = fmax.get("bus_clk")
+    bus = None
+    for key, value in fmax.items():
+        if key == "bus_clk" or key.endswith(".bus_clk"):
+            bus = value
+            print(f"  bus clock net: {key}")
+            break
     if not bus:
         failures.append("bus_clk: no timing entry")
     else:
@@ -76,8 +81,18 @@ def main(routed_path, timing_path, log_path):
         if not has_hop:
             failures.append("AE350_CORE_CLK_PLLR0 hop is absent")
 
+    bus_name, bus_net = find_net(module, "bus_clk")
+    if not bus_net:
+        failures.append("bus_clk net not found in the routed design")
+    else:
+        bus_route = bus_net.get("attributes", {}).get("ROUTING", "")
+        has_gb20 = "GB20" in bus_route
+        print(f"  {bus_name}: GB20 branch present={has_gb20}")
+        if has_gb20:
+            failures.append("bus_clk reaches a sink through GB20; the A25 bus dies")
+
     print("== clock-first ==")
-    if "routing 'bus_clk' first" in log:
+    if "bus_clk' first" in log:
         print("  bus_clk routed first")
     else:
         failures.append("nextpnr did not route bus_clk first")

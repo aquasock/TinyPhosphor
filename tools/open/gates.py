@@ -35,6 +35,10 @@ OPTIONAL_CLOCKS = {
     "clk_i2s2_mclk": 12.288,
 }
 BRAM_TYPES = {"DP", "SDP", "DPB", "DPX9B", "SDPX9B", "SDPB"}
+# The AE350 stream loader and play stream use intentional asynchronous FIFOs;
+# they are clock-domain crossings, not the video BRAMs the single-clock rule
+# protects.
+CDC_BRAM = ("loader.fifo", "play_stream.fifo", "async_fifo")
 PIXEL_CLOCK_NAMES = ("audio_player.clk", "clk_pixel", "pixel_div")
 
 
@@ -148,6 +152,9 @@ def main(routed_path, timing_path, log_path):
     bram_count = 0
     for name, cell in cells.items():
         if cell.get("type") not in BRAM_TYPES:
+            continue
+        if any(token in name for token in CDC_BRAM):
+            print(f"  async CDC: {name}")
             continue
         conn = cell.get("connections", {})
         clka, clkb = conn.get("CLKA"), conn.get("CLKB")

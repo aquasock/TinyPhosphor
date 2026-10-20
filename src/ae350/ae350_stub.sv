@@ -18,6 +18,18 @@ module ae350_subsystem (
     input  logic        clk,
     input  logic        tclk,
 
+    // SDRAM pins are declared by the shared player top.  The stub has no
+    // SDRAM controller, so they are tied off.
+    output logic        sdram_clk,
+    output logic        sdram_cs_n,
+    output logic        sdram_ras_n,
+    output logic        sdram_cas_n,
+    output logic        sdram_we_n,
+    output logic [1:0]  sdram_ba,
+    output logic [12:0] sdram_a,
+    output logic [1:0]  sdram_dqm,
+    inout  wire  [15:0] sdram_dq,
+
     output logic [14:0] ddr_addr,
     output logic [2:0]  ddr_bank,
     output logic        ddr_cs,
@@ -63,6 +75,16 @@ module ae350_subsystem (
     output logic        jtag_tdo,
     output logic        jtag_tdo_oe
 );
+
+    assign sdram_clk   = 1'b0;
+    assign sdram_cs_n  = 1'b0;
+    assign sdram_ras_n = 1'b0;
+    assign sdram_cas_n = 1'b0;
+    assign sdram_we_n  = 1'b0;
+    assign sdram_ba    = 2'd0;
+    assign sdram_a     = 13'd0;
+    assign sdram_dqm   = 2'd0;
+    assign sdram_dq    = 'z;
 
     assign ddr_addr    = 15'd0;
     assign ddr_bank    = 3'd0;

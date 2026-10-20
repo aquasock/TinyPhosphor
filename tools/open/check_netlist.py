@@ -28,6 +28,15 @@ PROFILES = {
         "PLL": 1,
         "AE350_SOC": 1,
     },
+    # Player + AE350 + SDRAM: the player's five PLLs plus the AE350 PLL,
+    # the HDMI serialisers, and the AE350 hard block.
+    "ae350_player": {
+        "PLL": 6,
+        "AE350_SOC": 1,
+        "OSER10": 4,
+        "ELVDS_OBUF": 4,
+        "DPB": 1,
+    },
 }
 
 
@@ -52,8 +61,13 @@ def main(path: str, top: str, profile: str = "player") -> int:
               file=sys.stderr)
         return 2
 
-    counts = Counter(cell.get("type") for cell in module.get("cells", {}).values())
-    print(f"{top}: {len(module.get('cells', {}))} cells")
+    top_cells = module.get("cells", {})
+    # Count primitives across the whole netlist: a kept hierarchy may hold the
+    # AE350 hard block inside the subsystem module rather than the top.
+    counts = Counter()
+    for m in doc.get("modules", {}).values():
+        counts.update(cell.get("type") for cell in m.get("cells", {}).values())
+    print(f"{top}: {len(top_cells)} cells")
     for name in ("PLL", "AE350_SOC", "OSER10", "ELVDS_OBUF", "DPB", "DPX9B",
                  "SDPX9B", "RAM16SDP4", "ALU"):
         if counts.get(name):

@@ -1,4 +1,3 @@
-src/ae350/ae350_stub.sv
 src/audio/audio_output_policy.sv
 src/audio/i2s_clock_control.sv
 src/audio/i2s_clock_probe.sv

@@ -1,12 +1,14 @@
-// Tang-Phosphor bring-up top level for the Tang Console 138K.
+// Tang-Phosphor player and display stack for the Tang Console 138K.
+//
+// This module is the player peripheral, not the board top: the AE350 image
+// instantiates it from `tiny_phosphor_ae350_player_top`, where the A25, its
+// bus clock and its memory live at the top level.  The player-only image
+// instantiates it from `tiny_phosphor_player_top` with the CPU interface held
+// idle.  The player owns the BL616 transport and the debug register bank; the
+// CPU interface below carries the AE350's stream, play stream and debug view
+// across the hierarchy.
 
-module tang_phosphor_top #(
-    // Debug builds only: PMOD0 carries the AE350's debug JTAG instead of a
-    // personality -- pin 1 TCK, 2 TMS, 3 TDI, 4 TDO, 7 TRST (pulled up; a
-    // jumper to pin 11 grounds it) -- for an external probe (OpenOCD;
-    // core-log entry 77).  The socket is otherwise released.
-    parameter bit AE350_JTAG_PMOD0 = 1'b0
-) (
+module tang_phosphor_player (
     input        sys_clk,
 
     // PMOD sockets.  Driven by the display stack: what each socket does is a
@@ -27,28 +29,43 @@ module tang_phosphor_top #(
     output [2:0] tmds_d_p,
     output [2:0] tmds_d_n,
 
-    output logic [14:0] ddr_addr,
-    output logic [2:0]  ddr_bank,
-    output logic        ddr_cs,
-    output logic        ddr_ras,
-    output logic        ddr_cas,
-    output logic        ddr_we,
-    output logic        ddr_ck,
-    output logic        ddr_ck_n,
-    output logic        ddr_cke,
-    output logic        ddr_odt,
-    output logic        ddr_reset_n,
-    output logic [3:0]  ddr_dm,
-    inout  wire  [31:0] ddr_dq,
-    inout  wire  [3:0]  ddr_dqs,
-    inout  wire  [3:0]  ddr_dqs_n
+    // The pixel clock is the transport clock the AE350 side uses for its
+    // stream loader, play-stream FIFO and debug readback.
+    output wire        clk_pixel,
+
+    // The transport's register interface, exposed so the AE350 top can answer
+    // reads in its 0x4000-0x43ff window.
+    output wire        debug_valid,
+    output wire        debug_write,
+    output wire [31:0] debug_address,
+    output wire [31:0] debug_wdata,
+    output wire        cpu_debug_valid,
+    input  wire [31:0] ae350_debug_rdata,
+
+    // BL616 stream to the AE350 loader while cpu_mode is set.
+    output wire        cpu_stream_start,
+    output wire        cpu_stream_end,
+    output wire        cpu_stream_cancel,
+    output wire [7:0]  cpu_stream_data,
+    output wire        cpu_stream_valid,
+    input  wire        cpu_stream_ready,
+
+    // AE350 play stream into the player, replacing the BL616 stream while
+    // cpu_mode is set.
+    input  wire        cpu_play_start,
+    input  wire        cpu_play_end,
+    input  wire        cpu_play_cancel,
+    input  wire [7:0]  cpu_play_data,
+    input  wire        cpu_play_valid,
+    input  wire [15:0] cpu_play_id,
+    input  wire [31:0] cpu_play_rate,
+    output wire        cpu_play_ready
 );
 
 localparam integer LOGIC_FREQ = 74_250_000;
 localparam [15:0] CORE_ID = 16'h0050;
 
 wire clk27;
-wire clk_pixel;
 wire clk_pixel_x5;
 wire requested_audio_rate_48k;
 
@@ -336,12 +353,7 @@ usb_hid_host controller_usb2 (
     .conerr(usb_error2_raw)
 );
 
-wire debug_valid;
-wire debug_write;
-wire [31:0] debug_address;
-wire [31:0] debug_wdata;
 wire [31:0] player_debug_rdata;
-wire [31:0] ae350_debug_rdata;
 wire [31:0] debug_rdata;
 wire [31:0] debug_crc_errors;
 wire [31:0] debug_bad_requests;
@@ -360,18 +372,6 @@ wire player_stream_valid;
 wire player_stream_ready;
 wire [7:0] player_stream_data;
 wire [15:0] player_stream_id;
-wire cpu_play_start;
-wire cpu_play_end;
-wire cpu_play_cancel;
-wire [7:0] cpu_play_data;
-wire cpu_play_valid;
-wire [15:0] cpu_play_id;
-wire [31:0] cpu_play_rate;
-wire cpu_stream_start;
-wire cpu_stream_end;
-wire cpu_stream_cancel;
-wire cpu_stream_valid;
-wire cpu_stream_ready;
 wire [31:0] stream_sessions;
 wire [31:0] stream_bytes;
 wire [31:0] stream_ends;
@@ -454,7 +454,7 @@ pmod_mirror_core #(
     .TRANSPORT      (1'b0),
     .EXTERNAL_AUDIO (1'b1),
     .EXPOSE_STATE   (1'b1),
-    .RELEASE_PMOD0  (AE350_JTAG_PMOD0),
+    .RELEASE_PMOD0  (1'b0),
     .I2S2_BACKEND   (1'b1),
     .I2S2_PLAYBACK  (1'b1)
 ) display (
@@ -701,7 +701,7 @@ debug_regs debug_registers (
 // the player's 0x0000-0x3fff registers).
 // ---------------------------------------------------------------------------
 wire in_ae350_window = debug_address[15:10] == 6'b01_0000;
-wire cpu_debug_valid = debug_valid && in_ae350_window;
+assign cpu_debug_valid = debug_valid && in_ae350_window;
 
 assign player_stream_start  = cpu_mode ? cpu_play_start  : stream_start;
 assign player_stream_end    = cpu_mode ? cpu_play_end    : stream_end;
@@ -716,6 +716,7 @@ assign cpu_stream_cancel = cpu_mode ? stream_cancel : 1'b0;
 assign cpu_stream_valid  = cpu_mode ? stream_valid  : 1'b0;
 
 assign stream_ready = cpu_mode ? cpu_stream_ready : player_stream_ready;
+assign cpu_play_ready = player_stream_ready && cpu_mode;
 
 // Registered for timing: iosys_bl616 samples debug_rdata six UART bytes after
 // it sets debug_address.
@@ -724,68 +725,7 @@ always @(posedge clk_pixel)
     debug_rdata_q <= in_ae350_window ? ae350_debug_rdata : player_debug_rdata;
 assign debug_rdata = debug_rdata_q;
 
-// The AE350's debug JTAG: on PMOD0 in a debug build (Digilent pins 1-4 are
-// Sipeed IO0, IO2, IO4 and IO6), otherwise held idle.
-logic ae350_jtag_trst, ae350_jtag_tck, ae350_jtag_tms, ae350_jtag_tdi;
-logic ae350_jtag_tdo, ae350_jtag_tdo_oe;
-generate
-    if (AE350_JTAG_PMOD0) begin : g_ae350_jtag
-        assign ae350_jtag_trst = pmod0_io[1];
-        assign ae350_jtag_tck = pmod0_io[0];
-        assign ae350_jtag_tms = pmod0_io[2];
-        assign ae350_jtag_tdi = pmod0_io[4];
-        assign pmod0_io[6]    = ae350_jtag_tdo_oe ? ae350_jtag_tdo : 1'bz;
-    end else begin : g_ae350_jtag_idle
-        assign ae350_jtag_trst = 1'b1;
-        assign ae350_jtag_tck = 1'b1;
-        assign ae350_jtag_tms = 1'b1;
-        assign ae350_jtag_tdi = 1'b0;
-    end
-endgenerate
-
-ae350_subsystem cpu_subsystem (
-    .clk           (sys_clk),
-    .tclk          (clk_pixel),
-    .ddr_addr      (ddr_addr),
-    .ddr_bank      (ddr_bank),
-    .ddr_cs        (ddr_cs),
-    .ddr_ras       (ddr_ras),
-    .ddr_cas       (ddr_cas),
-    .ddr_we        (ddr_we),
-    .ddr_ck        (ddr_ck),
-    .ddr_ck_n      (ddr_ck_n),
-    .ddr_cke       (ddr_cke),
-    .ddr_odt       (ddr_odt),
-    .ddr_reset_n   (ddr_reset_n),
-    .ddr_dm        (ddr_dm),
-    .ddr_dq        (ddr_dq),
-    .ddr_dqs       (ddr_dqs),
-    .ddr_dqs_n     (ddr_dqs_n),
-    .stream_start  (cpu_stream_start),
-    .stream_end    (cpu_stream_end),
-    .stream_cancel (cpu_stream_cancel),
-    .stream_data   (stream_data),
-    .stream_valid  (cpu_stream_valid),
-    .stream_ready  (cpu_stream_ready),
-    .play_start    (cpu_play_start),
-    .play_end      (cpu_play_end),
-    .play_cancel   (cpu_play_cancel),
-    .play_data     (cpu_play_data),
-    .play_valid    (cpu_play_valid),
-    .play_ready    (player_stream_ready && cpu_mode),
-    .play_id       (cpu_play_id),
-    .play_rate     (cpu_play_rate),
-    .debug_valid   (cpu_debug_valid),
-    .debug_write   (debug_write),
-    .debug_address (debug_address),
-    .debug_wdata   (debug_wdata),
-    .debug_rdata   (ae350_debug_rdata),
-    .jtag_trst     (ae350_jtag_trst),
-    .jtag_tck      (ae350_jtag_tck),
-    .jtag_tms      (ae350_jtag_tms),
-    .jtag_tdi      (ae350_jtag_tdi),
-    .jtag_tdo      (ae350_jtag_tdo),
-    .jtag_tdo_oe   (ae350_jtag_tdo_oe)
-);
+// The AE350 itself lives in tiny_phosphor_ae350_player_top.  This module
+// only carries its stream, play stream and debug view.
 
 endmodule

@@ -224,3 +224,64 @@ Integrate the AE350 and 32 MiB SDRAM into the player top next: replace `src/ae35
 - User Test: N/A
 
 ---
+
+## 5 COMMIT Unreleased 2026-10-20T14:54:17-0700
+
+#### Coming From:
+
+Unreleased 66eb0af
+
+#### Purpose:
+
+Move the AE350 and its 32 MiB SDRAM to the top-level base of the player image so the A25 bus clock follows the TinyNES/Tiny89/TinyCreature layout instead of sharing GB20.
+
+#### Outcome:
+
+TinyPhosphor replaced the embedded AE350 subsystem with `src/tiny_phosphor_ae350_player_top.sv`, an AE350-centric top that owns the `PLL_R[0]` 750/75 MHz clock, the A25 macro, the boot ROM, the 64 KiB block RAM, the 32 MiB J9 SDRAM, the EXTS register block, the stream loader, the play-stream FIFO and the transport debug view; the top-level bus net is named `bus_clk`, and `src/tang_phosphor_top.sv` became the `tang_phosphor_player` peripheral clocked by `clk_pixel`, with the player-only wrapper holding the CPU interface idle. The first AE350-centric synthesis exposed a real reset bug: `logic mem_resetn = por_n && ae350_pll_lock` was a declaration initializer, not a continuous assignment, so `ahb_ram` and `ahb_sdram` stayed in reset forever and the AE350 never left reset; changing it to `assign mem_resetn = por_n && ae350_pll_lock` restored the memory logic and grew the routed netlist from 25,760 to 31,805 cells. An eight-seed sweep with `NPNR_GOWIN_CLK_FIRST=bus_clk` produced one passing placement, seed 5, with `bus_clk` at 156.470 MHz against 75 MHz, `clk_pixel` at 91.558 MHz against 74.25 MHz, no hold violations, the `AE350_CORE_CLK_PLLR0` hop present and no GB20 branch; the other seven seeds failed the GB20 gate. Seed 5's `.bin` with SHA-256 `9578a45ab6671d949dc4b91687bb542348507727e71263be93f15a64a91779c7` was loaded with `tangload`; `fpga` reported core 80 answering, `0x43e0` read `0x0000001b` (POR done, AE350 PLL locked, SDRAM ready, CPU running), `0x43e4` read `0x00002730`, the log ring at `0x4100` decoded to `ae350 boot\n`, and the player ABI 1.10 HDMI frame counter advanced from `0x000009e6` to `0x00000cbe` while the user watched. The user confirmed the TinyPhosphor HDMI menu and reported PASS. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 5 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Bring up the onboard MAX98357A mono speaker on J5 next by adding top-level `i2s_bclk`, `i2s_lrck`, `i2s_dout` and `pa_en` ports, constraining them to the schematic's Y17, AB17, AA16 and Y14 balls, tapping the existing I2S transmitter, and verifying the amplifier enable and channel-select polarity; then load and play a WAV through the AE350. Keep seed 5 as the pinned placement until the GB20 sensitivity is removed, because seven of eight seeds still fail that gate.
+
+#### Files Modified:
+
+- firmware/ae350/Makefile
+- firmware/ae350/boot/boot.c
+- firmware/ae350/boot/boot.ld
+- firmware/ae350/boot/start.S
+- firmware/ae350/include/ae350.h
+- firmware/ae350/include/ae350_request.h
+- firmware/ae350/lib/crt0.S
+- firmware/ae350/lib/program.ld
+- src/ae350/ae350_boot_rom.sv
+- src/ae350/ae350_exts_regs.sv
+- src/ae350/ae350_play_stream.sv
+- src/ae350/ae350_pll.v
+- src/ae350/ae350_sdram_subsystem.sv
+- src/ae350/ae350_soc.sv
+- src/ae350/ae350_stream_loader.sv
+- src/ae350/ae350_stub.sv
+- src/ae350/async_fifo.sv
+- src/ae350/async_fifo_rst.sv
+- src/ae350/debug_read_cdc.sv
+- src/boards/console138k_ae350_player.cst
+- src/boards/console138k_ae350_player.sdc
+- src/tang_phosphor_top.sv
+- src/tiny_phosphor_ae350_player_top.sv
+- src/tiny_phosphor_player_top.sv
+- tools/open/ae350_gates.py
+- tools/open/ae350_player.sh
+- tools/open/ae350_player_gates.py
+- tools/open/ae350_player_sources.f
+- tools/open/ae350_player_sweep.sh
+- tools/open/check_netlist.py
+- tools/open/gates.py
+- tools/open/sources.f
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---
