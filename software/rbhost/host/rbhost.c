@@ -500,9 +500,10 @@ static int decode_file(const char *codec_dir, const char *input_fn)
     ci.filesize = ffilesize(input_fd);
     ci.id3 = &id3;
     if (use_dsp) {
-        /* The HDMI path carries 44.1 and 48 kHz natively; match the source
-         * when it is one of those and resample everything else to 44.1. */
-        unsigned long out_hz = id3.frequency == 48000 ? 48000 : 44100;
+        /* The open-flow I2S2 path currently runs a fixed 48 kHz PLL, so the
+         * DSP resamples every source to 48 kHz until runtime rate switching
+         * is restored. */
+        unsigned long out_hz = 48000;
         ci.dsp = dsp_get_config(CODEC_IDX_AUDIO);
         dsp_configure(ci.dsp, DSP_SET_OUT_FREQUENCY, out_hz);
         dsp_configure(ci.dsp, DSP_RESET, 0);

@@ -344,3 +344,33 @@ Restore 44.1/48 kHz handling so native-rate files play at the correct pitch: eit
 - User Test: PASS
 
 ---
+
+## 7 COMMIT Unreleased 2026-10-20T16:00:39-0700
+
+#### Coming From:
+
+Unreleased 745aaae
+
+#### Purpose:
+
+Make 44.1 kHz sources play at the correct pitch through the fixed 48 kHz I2S2 clock by resampling them in the Rockbox DSP.
+
+#### Outcome:
+
+TinyPhosphor's rbhost previously matched 44.1 or 48 kHz to the source; with the I2S2 PLL fixed at 48 kHz that made 44.1 kHz files fast. `software/rbhost/host/rbhost.c` now sets the DSP output frequency to 48 kHz for every source, so Rockbox resamples 44.1 kHz and any other native rate before PCM reaches `pcm_sink`. The on-demand resident image rebuilt to 844,508 payload bytes. On the deployed seed 6 image, `/root/media/music/test.wav` played as `1,753,721 samples at 48000 Hz` with `0 underruns`, a full `0x800` PCM FIFO and `0xf8 = 0x0012c000`; `phosphor status` reported zero underruns throughout, while `0x6c` retained 2,610 startup underruns from the initial buffer fill and did not increase. The user reported PASS for the 44.1 kHz playback. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 7 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Qualify the MAX98357A speaker path on J5, and decide whether to restore native 44.1/48 kHz PLL switching or keep the fixed-48 kHz resampling path. No runtime rate-switching work is required for correct pitch with the current implementation.
+
+#### Files Modified:
+
+- software/rbhost/host/rbhost.c
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---
