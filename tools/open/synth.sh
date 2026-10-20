@@ -20,9 +20,9 @@ export LC_ALL=C
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 out=${1:-$root/build/open/synth}
 suite=${OSS_CAD_SUITE:-$HOME/oss-cad-suite}
-top=tiny_phosphor_player_top
-family=gw5a
-src_list=$root/tools/open/sources.f
+top=${TOP:-tiny_phosphor_player_top}
+family=${FAMILY:-gw5a}
+src_list=${SOURCES:-$root/tools/open/sources.f}
 
 [[ -f "$src_list" ]] || { echo "missing source list: $src_list" >&2; exit 2; }
 [[ -f "$suite/environment" ]] || { echo "missing open toolchain: $suite" >&2; exit 2; }
@@ -92,6 +92,6 @@ echo "synthesising $top from ${#sources[@]} sources into $out/$top.json"
 yosys -Q -T -l "$out/synth.log" -s "$out/synth.ys"
 
 python3 "$root/tools/open/pll_strings.py" "$out/$top.json"
-python3 "$root/tools/open/check_netlist.py" "$out/$top.json" "$top"
+python3 "$root/tools/open/check_netlist.py" "$out/$top.json" "$top" "${NETLIST_PROFILE:-player}"
 
 echo "netlist: $out/$top.json"

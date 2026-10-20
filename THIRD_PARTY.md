@@ -29,6 +29,24 @@ is itself TinyTang `tools/desktop_open/fs_to_bin.py` at `d68bc18`, under the
 MIT License.  The remaining scripts are rewritten for TinyPhosphor's paths and
 checks but keep the same flow and gate rules.
 
+## TinyNES AE350 platform and boot ROM
+
+The stand-alone AE350 + 32 MiB SDRAM smoke imports TinyNES's platform at
+commit `50cd89e28ba4f503287b9085538390d945c1c124`:
+
+- `src/ae350_platform/ahb_boot_rom.sv`, `ahb_ram.sv`, `ahb_sdram.sv` and
+  `exts_uart.sv`
+- `firmware/boot/`, `firmware/common/` and `firmware/include/tinynes.h`
+- the J9 SDRAM/UART pin mapping, the AE350 PLL and reset recipe, and the
+  `AE350_SOC` hard-block connections
+
+License: MIT.  The AE350 itself is a hard block in the GW5AST-138C, not
+imported source.  Local changes: `src/ae350_smoke/tiny_phosphor_ae350_sdram_top.sv`
+is a stripped version of TinyNES's `fpga/ae350_soc/ae350_soc.sv` with the NES
+video, Wii pads and I2S removed; the boot banner strings say TinyPhosphor,
+while the loader protocol strings remain `TinyNES LOAD`/`RUN` so TinyNES's
+host loader still works.
+
 ## MiSTer-Phosphor design reference
 
 Tang-Phosphor's bounded audio profile, album-screen presentation and stereo

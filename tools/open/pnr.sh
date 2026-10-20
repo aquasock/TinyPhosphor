@@ -20,9 +20,10 @@ apycula=${APICULA_FORK:-$(dirname "$root")/apicula-mathieufro}
 pydeps=${PYDEPS:-$HOME/tools/pydeps}
 nextpnr=${NEXTPNR_HIMBAECHEL:-$HOME/tools/nextpnr-mathieufro/nextpnr-himbaechel}
 device=GW5AST-LV138PG484AC1/I0
-top=tiny_phosphor_player_top
-cst=$root/src/boards/console138k_player.cst
-sdc=$root/src/boards/console138k_player.sdc
+top=${TOP:-tiny_phosphor_player_top}
+cst=${CST:-$root/src/boards/console138k_player.cst}
+sdc=${SDC:-$root/src/boards/console138k_player.sdc}
+freq=${FREQ:-50}
 
 [[ -n "$netlist" && -f "$netlist" ]] || {
     echo "usage: pnr.sh <netlist.json> <out-dir> <seed>" >&2; exit 2;
@@ -51,7 +52,11 @@ esac
 
 mkdir -p "$out"
 # nextpnr's SDC reader rejects C++-style comments.
-sed 's|^\([[:space:]]*\)//|\1#|' "$sdc" > "$out/player.sdc"
+sed 's|^\([[:space:]]*\)//|\1#|' "$sdc" > "$out/design.sdc"
+
+if [[ -n "${NPNR_GOWIN_CLK_FIRST:-}" ]]; then
+    export NPNR_GOWIN_CLK_FIRST
+fi
 
 echo "nextpnr: $nextpnr"
 echo "seed: $seed"
@@ -59,9 +64,9 @@ echo "seed: $seed"
     --json "$netlist" \
     --write "$out/$top-routed.json" \
     --device "$device" \
-    --freq 50 \
+    --freq "$freq" \
     --vopt cst="$cst" \
-    --sdc "$out/player.sdc" \
+    --sdc "$out/design.sdc" \
     --report "$out/timing.json" \
     --seed "$seed" \
     --timing-allow-fail \

@@ -12,8 +12,10 @@ set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 dir=${1:-}
-top=tiny_phosphor_player_top
+top=${TOP:-tiny_phosphor_player_top}
 family=GW5AST-138C
+artifact=${ARTIFACT:-tiny_phosphor}
+gates=${GATES:-$root/tools/open/gates.py}
 suite=${OSS_CAD_SUITE:-$HOME/oss-cad-suite}
 apycula=${APICULA_FORK:-$(dirname "$root")/apicula-mathieufro}
 pydeps=${PYDEPS:-$HOME/tools/pydeps}
@@ -25,7 +27,7 @@ py=${PY:-$suite/py3bin/python3}
     echo "missing timing.json or nextpnr.log in $dir" >&2; exit 2;
 }
 
-"$py" "$root/tools/open/gates.py" \
+"$py" "$gates" \
     "$dir/$top-routed.json" "$dir/timing.json" "$dir/nextpnr.log" \
     | tee "$dir/gates.out"
 
@@ -36,17 +38,17 @@ export PYTHONPATH="$apycula:$pydeps:${PYTHONPATH:-}"
 
 "$py" -W ignore -m apycula.gowin_pack \
     -d "$family" \
-    -o "$dir/tiny_phosphor.fs" \
+    -o "$dir/$artifact.fs" \
     "$dir/$top-routed.json" > "$dir/pack.log" 2>&1 || {
         tail -40 "$dir/pack.log" >&2
         exit 1
     }
 "$py" "$root/tools/open/fs_to_bin.py" \
-    "$dir/tiny_phosphor.fs" -o "$dir/tiny_phosphor.bin" >/dev/null
+    "$dir/$artifact.fs" -o "$dir/$artifact.bin" >/dev/null
 
-sha=$(sha256sum "$dir/tiny_phosphor.fs" | cut -d' ' -f1)
-cp "$dir/tiny_phosphor.fs" "$dir/tiny_phosphor.${sha:0:12}.fs"
-cp "$dir/tiny_phosphor.bin" "$dir/tiny_phosphor.${sha:0:12}.bin"
-sha256sum "$dir/tiny_phosphor.fs" "$dir/tiny_phosphor.bin"
-echo "ready (one-wire .fs): $dir/tiny_phosphor.fs"
-echo "ready (tangload .bin): $dir/tiny_phosphor.bin"
+sha=$(sha256sum "$dir/$artifact.fs" | cut -d' ' -f1)
+cp "$dir/$artifact.fs" "$dir/$artifact.${sha:0:12}.fs"
+cp "$dir/$artifact.bin" "$dir/$artifact.${sha:0:12}.bin"
+sha256sum "$dir/$artifact.fs" "$dir/$artifact.bin"
+echo "ready (one-wire .fs): $dir/$artifact.fs"
+echo "ready (tangload .bin): $dir/$artifact.bin"

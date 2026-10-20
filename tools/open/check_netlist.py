@@ -14,15 +14,24 @@ import json
 import sys
 from collections import Counter
 
-REQUIRED = {
-    "PLL": 5,          # 27 MHz, HDMI pixel/serial, 12 MHz USB, I2S ref, I2S audio
-    "OSER10": 4,       # three TMDS data lanes plus the serialised clock lane
-    "ELVDS_OBUF": 4,   # four differential TMDS outputs
-    "DPB": 1,          # the menu renderer's block RAM (more are inferred)
+PROFILES = {
+    # Player image: five PLLs, four serialisers, four TMDS outputs and the
+    # menu renderer's block RAM.
+    "player": {
+        "PLL": 5,
+        "OSER10": 4,
+        "ELVDS_OBUF": 4,
+        "DPB": 1,
+    },
+    # Stand-alone AE350 smoke: the AE350 hard block and its PLL.  No HDMI.
+    "ae350": {
+        "PLL": 1,
+        "AE350_SOC": 1,
+    },
 }
 
 
-def main(path: str, top: str) -> int:
+def main(path: str, top: str, profile: str = "player") -> int:
     with open(path) as fh:
         doc = json.load(fh)
 
@@ -37,15 +46,21 @@ def main(path: str, top: str) -> int:
             return 2
         module = next(iter(modules.values()))
 
+    required = PROFILES.get(profile)
+    if required is None:
+        print(f"unknown netlist profile {profile!r}; known: {sorted(PROFILES)}",
+              file=sys.stderr)
+        return 2
+
     counts = Counter(cell.get("type") for cell in module.get("cells", {}).values())
     print(f"{top}: {len(module.get('cells', {}))} cells")
-    for name in ("PLL", "OSER10", "ELVDS_OBUF", "DPB", "DPX9B", "SDPX9B",
-                 "RAM16SDP4", "ALU"):
+    for name in ("PLL", "AE350_SOC", "OSER10", "ELVDS_OBUF", "DPB", "DPX9B",
+                 "SDPX9B", "RAM16SDP4", "ALU"):
         if counts.get(name):
             print(f"  {name:<10} {counts[name]}")
 
     missing = []
-    for name, want in REQUIRED.items():
+    for name, want in required.items():
         if counts.get(name, 0) < want:
             missing.append(f"{name}: {counts.get(name, 0)} < {want}")
     if missing:
@@ -59,6 +74,9 @@ def main(path: str, top: str) -> int:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: check_netlist.py <netlist.json> <top-module>")
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    if len(sys.argv) not in (3, 4):
+        raise SystemExit(
+            "usage: check_netlist.py <netlist.json> <top-module> [profile]"
+        )
+    profile = sys.argv[3] if len(sys.argv) == 4 else "player"
+    sys.exit(main(sys.argv[1], sys.argv[2], profile))

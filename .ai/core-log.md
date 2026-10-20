@@ -168,3 +168,59 @@ Qualify the player stream path and audio next: send a WAV or FLAC through TinyTa
 - User Test: PASS
 
 ---
+
+## 4 COMMIT Unreleased 2026-10-20T13:21:06-07:00
+
+#### Coming From:
+
+Unreleased 92c0c0c
+
+#### Purpose:
+
+Bring up the AE350 and its 32 MiB J9 SDRAM in the open flow as a stand-alone smoke image before integrating them with the player.
+
+#### Outcome:
+
+TinyPhosphor imported TinyNES's AE350 platform at `50cd89e28ba4f503287b9085538390d945c1c124`: `src/ae350_platform/ahb_boot_rom.sv`, `ahb_ram.sv`, `ahb_sdram.sv` and `exts_uart.sv`, plus `firmware/boot`, `firmware/common` and `firmware/include/tinynes.h` for the boot ROM. `src/ae350_smoke/tiny_phosphor_ae350_sdram_top.sv` is a stripped version of TinyNES's `ae350_soc.sv` with the NES video, Wii pads, I2S and DDR3 removed; it keeps the AE350 hard block, the `PLL_R[0]` 750/75 MHz clock recipe, the 32 KiB boot ROM, the 64 KiB block RAM at `0x60000000`, the 32 MiB J9 SDRAM at `0x40000000` and the EXTS UART. The boot banner strings now say TinyPhosphor while the loader protocol strings remain `TinyNES LOAD` and `TinyNES RUN`, so TinyNES's host loader still works. `tools/open/ae350_smoke.sh`, `ae350_gates.py` and `ae350_sources.f` add the smoke profile, and `synth.sh`, `pnr.sh`, `pack.sh` and `check_netlist.py` gained source-list, top, constraint, frequency, gate, artifact and netlist-profile overrides so the player and AE350 builds share one flow. The boot ROM builds to 2,666 bytes of text in a 32 KiB image; seed 1 passed every gate with `bus_clk` at 123.472 MHz against 75, the `AE350_CORE_CLK_PLLR0` dedicated hop present, `bus_clk` routed first, no hold violations, and the AE350 hard block and PLL present. The packed artifacts are `build/ae350_smoke/seed-1/tiny_phosphor_ae350_smoke.fs`, 37,743,845 bytes with SHA-256 `bc76120b28ed836fda93be4fe7aea3317ee06d323b6fdf281834b6c8b04ad57e`, and `tiny_phosphor_ae350_smoke.bin`, 4,714,476 bytes with SHA-256 `131a07120eb091a82408fb0588ada7fb5446ea41c16d000cb02357fb8fe98da9`. The `.bin` was put on the card as `/root/cores/console138k/tinyphosphor_ae350_smoke.bin`, loaded with `tangload`, and the EXTS UART captured through TinyTang's `fpgapipe` repeated `TinyPhosphor AE350 C OK UNC=0491d440 CAC=001f6bc2`, `TinyPhosphor SDRAM OK 32M` and `TinyNES LOAD`. The image has no player or display, so there was no user-visible test; the UART output is the smoke evidence. No program has been loaded through the loader yet, the boot ROM still speaks TinyNES's protocol, and the player integration, PLL re-plan and Rockbox software remain. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 4 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Integrate the AE350 and 32 MiB SDRAM into the player top next: replace `src/ae350/ae350_stub.sv` with an AE350+SDRAM subsystem that keeps Tang-Phosphor's stream, debug and play interfaces, add the SDRAM pins to the AE350 player wrapper, and re-plan the PLLs because the AE350 must own `PLL_R[0]` while the HDMI chain keeps `PLL_R[1]` and `PLL_R[3]`; the remaining I2S2 audio and USB clocks need either the free `PLL_R[2]` site or an AE350 PLL spare output, and the left-edge I2S pair is still suspect. Load a program through the TinyNES UART loader before Rockbox, and keep to one seed until timing fails.
+
+#### Files Modified:
+
+- THIRD_PARTY.md
+- docs/ae350-smoke.md
+- firmware/boot/Makefile
+- firmware/boot/crt0.S
+- firmware/boot/link.ld
+- firmware/boot/load.c
+- firmware/boot/load.h
+- firmware/boot/main.c
+- firmware/common/memtest.c
+- firmware/common/memtest.h
+- firmware/common/uart.c
+- firmware/common/uart.h
+- firmware/include/tinynes.h
+- src/ae350_platform/ahb_boot_rom.sv
+- src/ae350_platform/ahb_ram.sv
+- src/ae350_platform/ahb_sdram.sv
+- src/ae350_platform/exts_uart.sv
+- src/ae350_smoke/tiny_phosphor_ae350_sdram_top.sv
+- src/boards/console138k_ae350_sdram.cst
+- src/boards/console138k_ae350_sdram.sdc
+- tools/open/ae350_gates.py
+- tools/open/ae350_smoke.sh
+- tools/open/ae350_sources.f
+- tools/open/check_netlist.py
+- tools/open/pack.sh
+- tools/open/pnr.sh
+- tools/open/synth.sh
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: N/A
+
+---
