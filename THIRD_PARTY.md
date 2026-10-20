@@ -47,6 +47,30 @@ video, Wii pads and I2S removed; the boot banner strings say TinyPhosphor,
 while the loader protocol strings remain `TinyNES LOAD`/`RUN` so TinyNES's
 host loader still works.
 
+## Rockbox codecs and rbhost
+
+`third_party/rockbox` is a Git submodule of Rockbox at commit
+`e45936397ee3677c910c9a0c6473184e9755040c` and supplies the codec
+implementation, codec support libraries, metadata parsers and DSP used by the
+AE350 resident player:
+
+- Project: https://www.rockbox.org/ (mirror https://github.com/Rockbox/rockbox)
+- License: GNU General Public License version 2 or later. The combined
+  TinyPhosphor image is distributed under GPL-3.0; GPL-2.0-or-later is
+  compatible with that license.
+- Local patch: `third_party/patches/0001-libwma-frames-per-packet.patch`,
+  applied by `scripts/apply-rockbox-patches.sh`. Rockbox source is otherwise
+  unmodified.
+- `software/rbhost` is the GPL-3.0 host from Tang-Phosphor that builds the
+  codecs for RV32 and supplies the AE350 platform layer. Its configuration
+  headers are derived from Rockbox's `lib/rbcodec/test` and
+  `lib/rbcodec/rbcodecplatform` files and remain GPL-2.0-or-later.
+
+TinyPhosphor adaptations in `software/rbhost` are the RV32 `zifencei` target,
+the 32 MiB SDRAM memory map, and the on-demand input/output buffers at
+`0x41800000` and `0x41c00000`. The codec binaries are generated locally and
+are not committed.
+
 ## MiSTer-Phosphor design reference
 
 Tang-Phosphor's bounded audio profile, album-screen presentation and stereo

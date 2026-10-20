@@ -33,6 +33,14 @@ module tang_phosphor_player (
     // stream loader, play-stream FIFO and debug readback.
     output wire        clk_pixel,
 
+    // Onboard MAX98357A mono speaker on J5.  These are the I2S lane signals
+    // the player already emits for the Pmod I2S2 backend; the amplifier
+    // selects or mixes the stereo pair in hardware.  PA_EN is active high.
+    output wire        i2s_bclk,
+    output wire        i2s_lrck,
+    output wire        i2s_dout,
+    output wire        pa_en,
+
     // The transport's register interface, exposed so the AE350 top can answer
     // reads in its 0x4000-0x43ff window.
     output wire        debug_valid,
@@ -127,7 +135,7 @@ pll_i2s2_audio i2s2_audio_clock (
     .odsel0(7'd66), .odsel0_frac(3'd3)
 );
 i2s_clock_control i2s2_rate_control (
-    .clk(clk_pixel), .resetn(resetn), .requested_48k(requested_audio_rate_48k),
+    .clk(clk_pixel), .resetn(resetn), .requested_48k(1'b1),
     .pll_locked({i2s2_audio_locked, i2s2_ref_locked}),
     .pll_reset(i2s2_pll_reset), .mdsel(i2s2_mdsel), .mdsel_frac(i2s2_mdsel_frac),
     .odsel(i2s2_odsel), .odsel_frac(i2s2_odsel_frac),
@@ -442,6 +450,14 @@ i2s_playback audio_timebase (
     .hdmi_left(audio_sample_word[0]), .hdmi_right(audio_sample_word[1]),
     .lane_o(i2s2_play_lane_o), .lane_oe(i2s2_play_lane_oe)
 );
+// The onboard MAX98357A takes the same BCLK/LRCK/DIN lane the Pmod I2S2
+// backend receives.  Its SD_MODE/PA_EN input is active high on this board;
+// hold the amplifier off until the audio clock and player reset are ready.
+assign i2s_bclk = i2s2_play_lane_o[2];
+assign i2s_lrck = i2s2_play_lane_o[1];
+assign i2s_dout = i2s2_play_lane_o[3];
+assign pa_en    = resetn && i2s2_ready;
+
 
 // The display stack, folded in whole.  This is the same module the socket
 // bring-up core runs, with its transport off because this design already has
@@ -714,6 +730,7 @@ assign cpu_stream_start  = cpu_mode ? stream_start  : 1'b0;
 assign cpu_stream_end    = cpu_mode ? stream_end    : 1'b0;
 assign cpu_stream_cancel = cpu_mode ? stream_cancel : 1'b0;
 assign cpu_stream_valid  = cpu_mode ? stream_valid  : 1'b0;
+assign cpu_stream_data   = cpu_mode ? stream_data   : 8'd0;
 
 assign stream_ready = cpu_mode ? cpu_stream_ready : player_stream_ready;
 assign cpu_play_ready = player_stream_ready && cpu_mode;

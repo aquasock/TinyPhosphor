@@ -42,6 +42,12 @@ module tiny_phosphor_ae350_player_top (
     output wire [2:0]  tmds_d_p,
     output wire [2:0]  tmds_d_n,
 
+    // Onboard MAX98357A mono speaker on J5.
+    output wire        i2s_bclk,
+    output wire        i2s_lrck,
+    output wire        i2s_dout,
+    output wire        pa_en,
+
     // 32 MiB J9 SDRAM, on the memory port the AE350 calls DDR_H.
     output wire        sdram_clk,
     output wire        sdram_cs_n,
@@ -97,6 +103,11 @@ module tiny_phosphor_ae350_player_top (
         .tmds_clk_n         (tmds_clk_n),
         .tmds_d_p           (tmds_d_p),
         .tmds_d_n           (tmds_d_n),
+
+        .i2s_bclk           (i2s_bclk),
+        .i2s_lrck           (i2s_lrck),
+        .i2s_dout           (i2s_dout),
+        .pa_en              (pa_en),
 
         .clk_pixel          (clk_pixel),
         .debug_valid        (debug_valid),

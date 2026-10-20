@@ -35,6 +35,18 @@ IO_PORT "tmds_d_p[2]" PULL_MODE=NONE IO_TYPE=LVCMOS33D;
 IO_LOC "tmds_d_n[2]" J17;
 IO_PORT "tmds_d_n[2]" PULL_MODE=NONE IO_TYPE=LVCMOS33D;
 
+// Onboard MAX98357A mono speaker on J5.  Bank 5 is 3.3 V on the 138K SOM;
+// the "1.5 V" note in the SOM pin table applies to the 60K part.  PA_EN is
+// the amplifier's SD_MODE/ enable input, active high on this board.
+IO_LOC "i2s_bclk" Y17;
+IO_LOC "i2s_lrck" AB17;
+IO_LOC "i2s_dout" AA16;
+IO_LOC "pa_en"    Y14;
+IO_PORT "i2s_bclk" IO_TYPE=LVCMOS33;
+IO_PORT "i2s_lrck" IO_TYPE=LVCMOS33;
+IO_PORT "i2s_dout" IO_TYPE=LVCMOS33;
+IO_PORT "pa_en"    IO_TYPE=LVCMOS33;
+
 // UART to the external BL616 MCU
 IO_LOC "UART_RXD" V14;
 IO_LOC "UART_TXD" U15;

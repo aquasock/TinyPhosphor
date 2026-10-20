@@ -285,3 +285,62 @@ Bring up the onboard MAX98357A mono speaker on J5 next by adding top-level `i2s_
 - User Test: PASS
 
 ---
+
+## 6 COMMIT Unreleased 2026-10-20T15:57:50-0700
+
+#### Coming From:
+
+Unreleased 4bf0c7b
+
+#### Purpose:
+
+Integrate Rockbox's codec library and resident player into the AE350-centric TinyPhosphor image, and qualify 48 kHz playback on the Pmod I2S2.
+
+#### Outcome:
+
+TinyPhosphor imported Rockbox at `e45936397ee3677c910c9a0c6473184e9755040c` as `third_party/rockbox`, copied Tang-Phosphor's `software/rbhost` and its WMA patch, and built eleven RV32 codecs: `wav`, `flac`, `mpa`, `vorbis`, `opus`, `aac`, `alac`, `wavpack`, `wma`, `a52` and `tta`. The host and codec build required `-march=rv32imafdc_zifencei` and the newer libc's `libc_a-setjmp.o` name. The resident on-demand player image is 844,524 payload bytes; its memory map was moved into the 32 MiB SDRAM: host image and codec at `0x40000000`/`0x41000000`, heap through `0x41800000`, input at `0x41800000`, and a 4 MiB output ring at `0x41c00000`. The first loader attempts returned `BAD_HEADER` because `cpu_stream_data` had never been assigned in `tang_phosphor_player`; after `assign cpu_stream_data = cpu_mode ? stream_data : 8'd0`, the boot ROM accepted the image and the resident player logged `resident`. The first playback then produced heavy choppiness: the I2S2 MCLK probe read `0x00249f00` instead of `0x0012c000`, because the audio PLL's dynamic M/D selects were driving it to about 24 MHz. Setting `DYN_MDIV_SEL` and `DYN_ODIV0_SEL` false and tying the rate-control request to 48 kHz made the MCLK read exactly `0x0012c000`. An eight-seed sweep with four parallel jobs produced two passing placements, seed 6 and seed 8; seed 6 is the winner with `bus_clk` 151.814 MHz, `clk_pixel` 99.741 MHz, the AE350 hop present and no GB20 branch. Seed 6 played `scope-vertical-48000.wav` at 48 kHz with 659,836 samples, zero underruns and a full 2048-sample PCM FIFO, and the user heard the tone with no choppiness. The speaker path was also wired to the MAX98357A pins Y17/AB17/AA16/Y14, but it is not separately qualified. The cycle limitation is that 44.1 kHz files are forced through the 48 kHz PLL until runtime rate switching or resampling is restored. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 6 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Restore 44.1/48 kHz handling so native-rate files play at the correct pitch: either bring back the PLL's dynamic M/D selects with a verified open-flow encoding, or force the Rockbox DSP to resample to 48 kHz. Then qualify the MAX98357A path on J5, and commit the 44.1 kHz result as its own cycle.
+
+#### Files Modified:
+
+- .gitmodules
+- THIRD_PARTY.md
+- scripts/apply-rockbox-patches.sh
+- software/rbhost/Makefile
+- software/rbhost/config/autoconf.h
+- software/rbhost/config/endian.h
+- software/rbhost/config/file.h
+- software/rbhost/config/rbcodecconfig.h
+- software/rbhost/config/rbcodecplatform.h
+- software/rbhost/host/bench_qemu.c
+- software/rbhost/host/bench_qemu_start.S
+- software/rbhost/host/codec.ld
+- software/rbhost/host/codec_loader.c
+- software/rbhost/host/codec_loader.h
+- software/rbhost/host/crt0_ae350.S
+- software/rbhost/host/crt0_qemu.S
+- software/rbhost/host/host.ld
+- software/rbhost/host/memory.ld
+- software/rbhost/host/platform_ae350.c
+- software/rbhost/host/platform_qemu.c
+- software/rbhost/host/rbhost.c
+- src/boards/console138k_ae350_player.cst
+- src/pll/pll_i2s2_audio.v
+- src/tang_phosphor_top.sv
+- src/tiny_phosphor_ae350_player_top.sv
+- src/tiny_phosphor_player_top.sv
+- third_party/patches/0001-libwma-frames-per-packet.patch
+- third_party/rockbox
+- tools/ae350_run.py
+- tools/fpga_uart.py
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---

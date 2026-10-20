@@ -45,6 +45,12 @@ module tiny_phosphor_player_top (
         .tmds_d_p   (tmds_d_p),
         .tmds_d_n   (tmds_d_n),
 
+        // The onboard speaker is not driven by the player-only bring-up.
+        .i2s_bclk  (),
+        .i2s_lrck  (),
+        .i2s_dout  (),
+        .pa_en     (),
+
         // Player-only image: no CPU behind the transport.
         .clk_pixel         (),
         .debug_valid       (),
