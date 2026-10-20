@@ -404,3 +404,33 @@ None.
 - User Test: PASS
 
 ---
+
+## 9 COMMIT Unreleased 2026-10-20T16:23:34-07:00
+
+#### Coming From:
+
+Unreleased 4ed81af
+
+#### Purpose:
+
+Qualify every Rockbox-supported corpus format through the resident AE350 player with a ten-second playback window.
+
+#### Outcome:
+
+The twelve-file corpus in `/root/media/music` was played through the resident AE350 player on the deployed seed 6 image, with each file allowed ten and a half seconds before `phosphor status` was read and the track stopped. WAV, FLAC, MP2, MP3, Ogg Vorbis, AAC in MP4, ALAC in M4A, WavPack, AC-3, TTA, WMA and Opus all reached the player, produced nonzero sample counts between 328,356 and 353,557 at 48000 Hz, and reported zero underruns; the counts cover roughly seven seconds of audio after the approximately 2.7-second load. The user confirmed all formats pass. Because every track was stopped after the window, this qualifies codec startup, decode and transport on the real card path but not end-of-file completion. No source change was required. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 9 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Validate full-track completion and end-of-file handling on a representative subset before treating the codec path as complete, then continue with HDMI player UI and visualizer integration.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: PASS
+
+---
