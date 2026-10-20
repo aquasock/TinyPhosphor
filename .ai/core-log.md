@@ -57,3 +57,114 @@ None.
 - User Test: N/A
 
 ---
+
+## 3 COMMIT Unreleased 2026-10-20T13:07:02-07:00
+
+#### Coming From:
+
+Unreleased 875f5fc
+
+#### Purpose:
+
+Build and qualify TinyPhosphor's first player-only image with the open FPGA flow, without the AE350 or DDR3 subsystem.
+
+#### Outcome:
+
+TinyPhosphor imported Tang-Phosphor's player RTL at `c261fcb` into `src/` and added `src/ae350/ae350_stub.sv` plus `src/tiny_phosphor_player_top.sv`, so the player elaborates without the AE350 or the vendor DDR3 IP; `cpu_mode` resets to zero, leaving the FPGA player on the stream path. The open-flow scripts under `tools/open/` synthesise with `read_slang` and `synth_gowin`, restore PLL string parameters, place and route with the GW5AST-138C nextpnr fork, gate timing, hold, block RAM and clock topology, and pack with Apicula; no GowinSynthesis is invoked. Three RTL corrections were required: `src/hdmi/hdmi.sv` and `src/hdmi/packet_picker.sv` no longer mix blocking and non-blocking assignments in `always_ff`, and the HDMI clock chain now generates 371.25 MHz on the PLL's `CLKOUT1`, divides it by five in a `CLKDIV` placed at `RIGHTSIDE[4]`, and serialises the TMDS clock lane through a fourth `OSER10`; `src/tang_phosphor_top.sv` and `src/phosphor_video.sv` drive the differential clock lane from that serialised output. The I2S2 audio PLL's dynamic select nets are tied to the 48 kHz recipe because this nextpnr/Apicula model cannot place them, so audio is fixed-rate and best-effort. One seed, seed 1, passed every gate: `clk_pixel` 99.404 MHz against 74.25, `clk12` 136.295 MHz, zero hold violations, 169 two-clock-capable block RAMs all single-clock, five PLLs, four OSER10s, and both HDMI clocks on dedicated routes. The packed artifacts are `build/open/seed-1/tiny_phosphor.fs`, 39,397,861 bytes with SHA-256 `c5d9d56d30e989656828daea2785a7c9cbdbd3cb24974b6926ec8b2076a9bc72`, and `build/open/seed-1/tiny_phosphor.bin`, 4,920,812 bytes with SHA-256 `1521246f990425dde92f667c38448f858a2e06112d8424066a455897a2bc51ed`. The `.bin` was put at `/root/cores/console138k/tinyphosphor.bin` with TinyTang's `tinytang_put.py`, loaded with `tangload`, and the core accepted the `/tang.ini` socket declaration at `0xc0 = 0x0710`; `fpga` reported core 80 answering on UART1. The user watched the HDMI output and reported PASS for the 96x64 address-encoded menu frame at 1280x720. The 8-seed sweep was not run because seed 1 passed every gate; the real AE350, DDR3, runtime audio-rate switching, and the 4-bit DPB review remain out of scope. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 3 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Qualify the player stream path and audio next: send a WAV or FLAC through TinyTang, check the HDMI audio cadence against the fixed 48 kHz I2S2 clock, and decide whether runtime rate switching is required before restoring the dynamic I2S PLL selects. The real AE350 and DDR3 subsystem remains deferred; if it is revived, replace Gowin's DDR3 IP with the dock's J9 SDRAM or keep decoding on the BL616. An 8-seed sweep is only warranted if a future netlist change or an HDMI fault makes seed 1's placement inadequate.
+
+#### Files Modified:
+
+- .gitignore
+- LICENSE
+- THIRD_PARTY.md
+- docs/open-flow-build.md
+- src/ae350/ae350_stub.sv
+- src/assets/font.vh
+- src/audio/audio_output_policy.sv
+- src/audio/i2s_clock_control.sv
+- src/audio/i2s_clock_probe.sv
+- src/audio/i2s_playback.sv
+- src/audio/i2s_tx.sv
+- src/audio/pcm_sample_fifo.sv
+- src/audio/pcm_sink.sv
+- src/audio_test_source.sv
+- src/boards/console138k_merged.cst
+- src/boards/console138k_merged.sdc
+- src/boards/console138k_player.cst
+- src/boards/console138k_player.sdc
+- src/debug/debug_regs.sv
+- src/debug/ui_debug_regs.sv
+- src/hdmi/audio_clock_regeneration_packet.sv
+- src/hdmi/audio_info_frame.sv
+- src/hdmi/audio_sample_packet.sv
+- src/hdmi/auxiliary_video_information_info_frame.sv
+- src/hdmi/hdmi.sv
+- src/hdmi/packet_assembler.sv
+- src/hdmi/packet_picker.sv
+- src/hdmi/serializer.sv
+- src/hdmi/source_product_description_info_frame.sv
+- src/hdmi/tmds_channel.sv
+- src/input/keylink_rx.sv
+- src/iosys/gowin_dpb_menu.v
+- src/iosys/iosys_bl616.v
+- src/iosys/textdisp.v
+- src/iosys/textdisp_wide.sv
+- src/iosys/uart_fixed.v
+- src/oled/oled_panel.sv
+- src/oled/oled_spi.sv
+- src/phosphor_video.sv
+- src/pll/pll_12.v
+- src/pll/pll_27.v
+- src/pll/pll_74.v
+- src/pll/pll_i2s2_audio.v
+- src/pll/pll_i2s2_ref.v
+- src/pmod/pmod_enc.sv
+- src/pmod/pmod_i2s2_tone.sv
+- src/pmod/pmod_io_buf.sv
+- src/pmod/pmod_oledrgb.sv
+- src/pmod/pmod_slot.sv
+- src/pmod/pmod_vga.sv
+- src/pmod_mirror_core.sv
+- src/stream/stream_debug_sink.sv
+- src/tang_phosphor_top.sv
+- src/tiny_phosphor_player_top.sv
+- src/ui/phosphor_album_ui.sv
+- src/ui/phosphor_time_digits.sv
+- src/ui/phosphor_ui_control.sv
+- src/ui/ui_checksum.sv
+- src/ui/ui_frame_bank.sv
+- src/ui/ui_frame_store.sv
+- src/ui/ui_menu_renderer.sv
+- src/ui/ui_scanout.sv
+- src/ui/ui_swap.sv
+- src/usb_hid_host.v
+- src/usb_hid_host_rom.hex
+- src/video/ui_desk_layer.sv
+- src/video/ui_hdmi_backend.sv
+- src/video/ui_hdmi_scan.sv
+- src/video/ui_vga_backend.sv
+- src/visualizers/scope_phosphor_ram.sv
+- src/visualizers/scope_reconstruct.sv
+- src/visualizers/scope_xy.sv
+- tools/open/build.sh
+- tools/open/check_netlist.py
+- tools/open/fs_to_bin.py
+- tools/open/gates.py
+- tools/open/pack.sh
+- tools/open/pll_strings.py
+- tools/open/pnr.sh
+- tools/open/sources.f
+- tools/open/sweep.sh
+- tools/open/synth.sh
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---
