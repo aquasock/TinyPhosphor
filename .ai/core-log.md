@@ -374,3 +374,33 @@ Qualify the MAX98357A speaker path on J5, and decide whether to restore native 4
 - User Test: PASS
 
 ---
+
+## 8 COMMIT Unreleased 2026-10-20T16:09:39-0700
+
+#### Coming From:
+
+Unreleased e27b4d4
+
+#### Purpose:
+
+Qualify the onboard MAX98357A mono speaker path on J5.
+
+#### Outcome:
+
+The deployed seed 6 image already drove the MAX98357A from the same I2S lane as the Pmod I2S2: `I2S_BCLK` on Y17, `I2S_LRCK` on AB17, `I2S_DOUT` on AA16 and `PA_EN` on Y14, with `PA_EN` held high while the player and I2S clock are ready. The user played `test.wav` and heard the tone from both the Pmod I2S2 and the speaker connected across J5 pins 2 and 4, confirming both the FPGA pin mapping and the amplifier enable path. The earlier `scope-vertical-48000.wav` produced only quiet hiss from the speaker, which is consistent with the amplifier's SD_MODE-high left-channel selection and a fixture whose audible signal was not on the selected channel. No source change was needed for this qualification. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 8 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+No speaker work remains. Continue with the next player or UI milestone; the 48 kHz resampling path and the AE350 resident player remain the current playback baseline.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: PASS
+
+---
