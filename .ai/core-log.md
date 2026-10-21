@@ -744,3 +744,34 @@ Colour returns as its own cycle with a palette that does not widen the drawing p
 - User Test: PASS
 
 ---
+
+## 20 COMMIT Unreleased 2026-10-21T10:27:51-07:00
+
+#### Coming From:
+
+Unreleased 6a89a6b
+
+#### Purpose:
+
+Replace the one-line README with documentation of what the project is, how it builds and what it still cannot do.
+
+#### Outcome:
+
+`README.md` was written from the state the log records rather than from the earlier bring-up notes. It states the target, the eleven Rockbox codec families, the 4 MiB streaming cache, the Pmod I2S2 and HDMI audio paths at 48 kHz, the disabled MAX98357A, the XY scope with its persistence, bloom, swap, dots and single-channel controls, and it points at TinyTang for the firmware, the app and the `phosphor` command. It documents the card layout -- the core image, `/root/ae350/resident.tpi` and `/tang.ini` with the socket declaration that has to match where the Pmod is seated -- and the build, including the `OSS_CAD_SUITE` default with the reason it matters (Yosys 0.69+152 leaves `$buf` cells this design cannot place), the one-seed and sweep commands with `SWEEP_APPROVED`, the gate list with the AE350 dedicated hop and the GB20 rule, and the two registers that gate a load, `0xf8` at `0x0012c000` and `0xfc` at `0x0000001f` with the retry count in bits 15:8. It records register ABI 1.14 including the 16-bit scope word at `0xac` and the reserved bits 5 and 11:10, describes the repository layout, and lists the limits: fixed 48 kHz with Rockbox resampling, the speaker in shutdown, and scope colour built twice and dropped because the palette moved the bus clock onto GB20. `docs/open-flow-build.md` was reframed: it presented the first player-only image as the product, so its introduction now says it covers the flow and the player-only profile while the shipped configuration is the AE350 player, its build section gives both commands, its gate list covers the AE350 gate scripts and `check_netlist.py`, and its limitations are scoped to the profile rather than to the project. `docs/ae350-smoke.md` was checked and remains accurate. The cycle also settled the sample-rate question without a build: the library on the card is 44.1 and 48 kHz throughout the Various folder -- 86 at 44.1, 12 with a second stream at 44.1, 4 at 48 and one at 22.05, `Cyriak - No More Memory.mp3` -- so native-rate clocking would change nothing audible and leave the odd file resampling anyway; a drive-wide scan was stopped at the user's request and no other folder was surveyed. No build, deployment or hardware test applied to this documentation-only cycle. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 20 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+The sample-rate change is deliberately not scheduled: the library is 44.1 and 48 throughout what was surveyed, so a second audio PLL would buy headroom and tidiness rather than any audible improvement, and the one 22.05 kHz file would still resample. Scope colour is the open feature, and the honest route is a palette applied outside the scope's timing path rather than another mux inside it. The placement rule that turns six ALUs into a GB20 failure on every seed is the largest engineering debt and would pay for itself across every future cycle. Album art remains unimplemented, the speaker stays in shutdown, and runtime rate switching waits on either that investigation or a decision that it is not wanted.
+
+#### Files Modified:
+
+- README.md
+- docs/open-flow-build.md
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: N/A
+
+---
