@@ -69,7 +69,7 @@ module pmod_mirror_core #(
     input  logic       audio_rate_48k_in,
     input  logic [15:0] audio_sample_word_in [1:0],
 
-    input logic [3:0] i_scope_control,
+    input logic [15:0] i_scope_control,
     input logic i_scope_flush, i_sample_present,
     output logic [31:0] o_scope_dropped, o_scope_status, o_scope_sweeps,
 

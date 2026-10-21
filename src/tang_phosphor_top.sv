@@ -214,7 +214,7 @@ wire [15:0] player_audio_left;
 wire [15:0] player_audio_right;
 wire pcm_sample_valid;
 wire emitted_sample_present;
-wire [3:0] scope_control;
+wire [15:0] scope_control;
 wire [31:0] hdmi_audio_cadence;
 wire [31:0] scope_dropped, scope_status, scope_sweeps;
 wire playback_active;

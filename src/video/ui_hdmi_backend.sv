@@ -23,7 +23,7 @@ module ui_hdmi_backend #(parameter bit SCOPE_BACKEND = 1'b0) (
     input  logic        audio_rate_48k,
     input  logic [15:0] audio_sample_word [1:0],
 
-    input logic [3:0] scope_control,
+    input logic [15:0] scope_control,
     input logic scope_flush, sample_present,
     output logic [31:0] scope_dropped, scope_status, scope_sweeps,
 

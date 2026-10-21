@@ -75,7 +75,7 @@ module debug_regs (
     input  [7:0]  link_key1,
     input  [31:0] i2s2_mclk_count,
     input  [31:0] i2s2_clock_status,
-    output reg [3:0] scope_control,
+    output reg [15:0] scope_control,
     input [31:0] scope_dropped, scope_status, scope_sweeps,
     // HDMI audio frames per second at 0x2c, as hdmi_audio_cadence packs them.
     input [31:0] hdmi_audio_cadence,
@@ -123,10 +123,10 @@ always @(posedge clk) begin
         cpu_mode          <= 1'b0;
         // The XY scope is the player's picture, so it comes up enabled: with
         // bit 0 clear the HDMI picture falls back to the colour pattern until
-        // a host writes 0xac, which a fresh tangload never does.  The other
-        // three bits keep their zero defaults, so trails and glow stay as the
-        // ring buffer's quiet state until something selects them.
-        scope_control     <= 4'b0001;
+        // a host writes 0xac, which a fresh tangload never does.  The rest of
+        // the word keeps its zero defaults: persistence 67 ms, no instant
+        // override, no glow.
+        scope_control     <= 16'h0001;
     end else begin
         uptime_cycles <= uptime_cycles + 1'b1;
         if (frame_tick)
@@ -147,7 +147,7 @@ always @(posedge clk) begin
                 else if (request_address == 32'h0000_00a8)
                     cpu_mode <= request_wdata[0];
                 else if (request_address == 32'h0000_00ac)
-                    scope_control <= request_wdata[3:0];
+                    scope_control <= request_wdata[15:0];
             end
         end
     end
@@ -182,7 +182,7 @@ always @(posedge clk) begin
     read_known_q <= read_known;
     case (read_index[4:0])
         5'd0: read_lo <= MAGIC;
-        5'd1: read_lo <= 32'h0001_000c; // register ABI 1.12: I2S2 retry count at 0xfc
+        5'd1: read_lo <= 32'h0001_000e; // register ABI 1.14: 16-bit scope control at 0xac
         5'd2: read_lo <= BUILD_DATE;
         5'd3: read_lo <= 32'h0000_00ff;
         5'd4: read_lo <= uptime_cycles;
@@ -223,7 +223,7 @@ always @(posedge clk) begin
         5'd8: read_hi <= boundary_gap_samples;
         5'd9: read_hi <= {16'b0, audible_stream_id};
         5'd10: read_hi <= {31'b0, cpu_mode};
-        5'd11: read_hi <= {28'b0, scope_control};
+        5'd11: read_hi <= {16'b0, scope_control};
         5'd12: read_hi <= scope_dropped;
         5'd13: read_hi <= scope_status;
         5'd14: read_hi <= scope_sweeps;

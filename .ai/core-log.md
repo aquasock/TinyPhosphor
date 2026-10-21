@@ -710,3 +710,37 @@ The scope default is qualified; the next visualizer work is trails and glow, whi
 - User Test: PASS
 
 ---
+
+## 19 COMMIT Unreleased 2026-10-21T10:06:10-07:00
+
+#### Coming From:
+
+Unreleased 2312522
+
+#### Purpose:
+
+Give the XY scope the controls a host could not previously reach -- persistence, bloom, channel swap, dots and single-channel views -- through a wider control word at `0xac`.
+
+#### Outcome:
+
+`src/visualizers/scope_xy.sv` widened `control` and `settings` to sixteen bits and added, at register ABI 1.14: bit 3 instant (no decay; beats bits 2:1), bit 4 bloom, bit 5 freeze, bit 6 channel swap, bit 7 dots only, and 9:8 a channel select of XY, X only or Y only; bits 11:10 were reserved for colour. Bloom was fixed as a colour fringe: the first version added the halo to green, where an already bright green trace saturates and 12 to 25 percent more reads as no change at all, so the halo now goes to red and blue at quarter and half weight, the two channels a green beam is not using. Channel select and swap act on the source samples before the existing axis maps, so a zero channel lands on the map's centre. `status` was repacked -- settings at 31:16, the FIFO level at 15:8 -- because the previous layout put `settings[4]` at bit 24, which `status[31:24]=age_clock` then overwrote, so a bloom write read back as off. `mode_change` was masked to exclude bloom and freeze, since a control change clears the plane and a freeze that cleared it erased the image it was meant to hold. `src/debug/debug_regs.sv`, `src/tang_phosphor_top.sv`, `src/pmod_mirror_core.sv` and `src/video/ui_hdmi_backend.sv` carried the width through, and the ABI moved to 1.14. The cycle needed four netlists: the first with colour passed no seed of forty, its `bus_clk` route growing from 5,033 to 5,627 tokens and entering at `GB20` instead of `GB00`, so the colour multiplexer was removed at the user's direction and rebuilt; that netlist passed seed 2 of eight, and the freeze mask then passed seed 7 of eight. The shipped image is seed 7, `clk_pixel` 100.786 MHz, `bus_clk` 146.480 MHz, `clk12` 111.757 MHz, no hold violations, no GB20 branch, six PLLs, four OSER10s and 205 two-clock-capable block RAMs, packed as `build/ae350_e22/sweep/seed-7/tiny_phosphor_ae350_player.bin`, 5,047,788 bytes with SHA-256 `e946042428ae11e5e1e31c73dd38db9064e6289d67948a7afa7497f429cde4e4`, and installed on the card as both `tinyphosphor.bin` and `tinyphosphor_e22.bin`. The user tested it from the desktop's Phosphor app: persistence, bloom, swap, dots and the channel select all took effect, freeze instead blanked the screen, and the app's freeze and swap captions were clipped; the free function all worked as specified and the freeze control was removed at the user's direction, which needs no further build because nothing writes bit 5. Colour is deferred: the palette multiplexer is what moved the bus clock, so it returns in a cycle that does not also widen the drawing path. `.ai/core-reference.md` records the ABI 1.14 word, the reason bloom is a colour fringe, the status-word overlap and the reserved bits. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 19 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Colour returns as its own cycle with a palette that does not widen the drawing path, since the four-way multiplexer is what pushed `bus_clk` onto GB20 across forty seeds; bit 5 remains reserved and the freeze gate in `scope_xy.sv` is unreachable, so it should be stripped with that build. The single-channel views and dots mode are qualified by the app test but not separately exercised as three checks. The older items stand: runtime 44.1/48 kHz PLL switching would remove the fixed-48 kHz resampling, album art is unimplemented, and the speaker stays in shutdown.
+
+#### Files Modified:
+
+- src/debug/debug_regs.sv
+- src/pmod_mirror_core.sv
+- src/tang_phosphor_top.sv
+- src/video/ui_hdmi_backend.sv
+- src/visualizers/scope_xy.sv
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---

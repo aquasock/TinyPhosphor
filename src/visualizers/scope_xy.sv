@@ -8,7 +8,7 @@ module scope_xy #(
     parameter integer FIFO_ADDRESS_WIDTH = 8
 ) (
     input logic clk, resetn,
-    input logic [3:0] control,
+    input logic [15:0] control,
     input logic flush, audio_tick, audio_present,
     input logic signed [15:0] audio_left, audio_right,
     input logic [10:0] cx,
@@ -17,13 +17,29 @@ module scope_xy #(
     output logic [23:0] rgb,
     output logic [31:0] dropped, status, sweeps
 );
-    logic [3:0] settings;
+    // Register ABI 1.14 controls, all captured at a frame start:
+    //   0      enable
+    //   2:1    persistence (0 133 ms, 1 267 ms, 2 533 ms, 3 67 ms)
+    //   3      instant, no decay; beats 2:1
+    //   4      bloom, the halo added to the channels the beam is not using
+    //   5      freeze, stop writing and stop ageing the plane
+    //   6      swap the channels: red on Y, blue on X
+    //   7      dots only, no line between successive points
+    //   9:8    channels: 0 XY, 1 X only, 2 Y only, 3 reserved (XY)
+    //   11:10  colour: 0 green, 1 white, 2 amber, 3 cyan
+    logic [15:0] settings;
     // Frame start and flush are registered at the boundary, acting one pixel
     // clock later (cx==1, still in the left bar), so clear_all is not a long
     // path from the HDMI counters or the audio timebase.
     logic frame_start=0, flush_q=0;
     always_ff @(posedge clk) begin frame_start<=cx==0 && cy==0; flush_q<=flush; end
-    wire mode_change = frame_start && settings!=control;
+    // A clear is right when the drawing changes -- persistence, instant, swap,
+    // dots, channels -- because the plane holds strokes made under the old
+    // rules.  It is wrong for bloom and freeze: bloom only recolours pixels
+    // already there, and a freeze that cleared the plane would erase the very
+    // image it is meant to hold.  Both bits are masked out of the comparison.
+    wire [15:0] clear_mask = 16'hffcf;
+    wire mode_change = frame_start && (settings & clear_mask) != (control & clear_mask);
     assign enabled = settings[0];
     logic initializing;
     logic [14:0] clear_addr;
@@ -45,7 +61,10 @@ module scope_xy #(
     logic was_present;
     wire break_trace = audio_tick && !audio_present && was_present;
     wire queue_reset = clear_all || initializing || break_trace;
-    wire input_valid = usable && audio_tick && audio_present;
+    // Freeze stops new points entering and stops retirement ageing the plane,
+    // so the figure stays exactly as it was when the bit was set.
+    wire frozen = settings[5];
+    wire input_valid = usable && audio_tick && audio_present && !frozen;
     always_ff @(posedge clk) begin
         if (!resetn) begin settings<=0; was_present<=0; end
         else begin
@@ -123,9 +142,17 @@ module scope_xy #(
     wire signed [11:0] twice_error = 12'(error) <<< 1;
     wire move_x=twice_error > -$signed({3'b0,dy});
     wire move_y=twice_error <  $signed({3'b0,dx});
-    wire [8:0] next_x=fifo_data[31:23]^9'h100;
-    wire [8:0] next_y=~(fifo_data[15:7]^9'h100);
+    // Channel select and swap happen before the axis maps, so a swapped or
+    // single-channel view uses the same maps as the stereo one.  A zero source
+    // lands on the map's centre: 0x100 for X, and 0xFF for Y.
+    wire [8:0] chan_left = fifo_data[31:23];
+    wire [8:0] chan_right = fifo_data[15:7];
+    wire [8:0] x_source = (settings[9:8]==2'd1) ? 9'd0 : (settings[6] ? chan_right : chan_left);
+    wire [8:0] y_source = (settings[9:8]==2'd2) ? 9'd0 : (settings[6] ? chan_left : chan_right);
+    wire [8:0] next_x=x_source^9'h100;
+    wire [8:0] next_y=~(y_source^9'h100);
     wire fresh_point=!have_previous || fifo_data[32];
+    wire dots_only=settings[7];
     wire [8:0] distance_x=next_x>=previous_x ? next_x-previous_x : previous_x-next_x;
     wire [8:0] distance_y=next_y>=previous_y ? next_y-previous_y : previous_y-next_y;
 
@@ -133,9 +160,9 @@ module scope_xy #(
     logic [2:0] retire_state;
     logic [14:0] retire_addr;
     logic [7:0] expired;
-    wire retire_begin=usable && retire_state==0 && schedule==0;
+    wire retire_begin=usable && retire_state==0 && schedule==0 && !settings[5];
     wire line_slot=usable && retire_state==0 && !retire_begin;
-    assign fifo_pop=line_slot && !drawing && fifo_valid;
+    assign fifo_pop=line_slot && !drawing && fifo_valid && !settings[5];
     wire draw_fire;
     always_ff @(posedge clk) begin
         if (queue_reset) begin
@@ -144,12 +171,14 @@ module scope_xy #(
             end_x<=0; end_y<=0; dx<=0; dy<=0; error<=0; step_x<=0; step_y<=0;
         end else begin
             if (fifo_pop) begin
-                draw_x<=fresh_point?next_x:previous_x;
-                draw_y<=fresh_point?next_y:previous_y;
+                // Dots only writes each point and starts no line, which is the
+                // same shape as a fresh point after a gap.
+                draw_x<=(fresh_point||dots_only)?next_x:previous_x;
+                draw_y<=(fresh_point||dots_only)?next_y:previous_y;
                 end_x<=next_x; end_y<=next_y;
-                dx<=fresh_point?9'd0:distance_x;
-                dy<=fresh_point?9'd0:distance_y;
-                error<=fresh_point?11'sd0:$signed({2'b0,distance_x})-$signed({2'b0,distance_y});
+                dx<=(fresh_point||dots_only)?9'd0:distance_x;
+                dy<=(fresh_point||dots_only)?9'd0:distance_y;
+                error<=(fresh_point||dots_only)?11'sd0:$signed({2'b0,distance_x})-$signed({2'b0,distance_y});
                 step_x<=next_x>=previous_x; step_y<=next_y>=previous_y;
                 previous_x<=next_x; previous_y<=next_y;
                 have_previous<=1; drawing<=1;
@@ -312,7 +341,9 @@ module scope_xy #(
         for(integer g=0;g<8;g++) begin
             age_live[g]<=b_q[g][8];
             age_q[g]<=age_clock-b_q[g][7:0];
-            ramp_q[g]<=trail_ramp(age_live[g],age_q[g],settings[2:1]);
+            // Bit 3 is the instant override: no decay at all, so only the
+            // points the beam is on now are lit.  It beats bits 2:1.
+            ramp_q[g]<=settings[3]?8'd0:trail_ramp(age_live[g],age_q[g],settings[2:1]);
             bright_q[g]<=square_round(ramp_q[g]);
         end
     end
@@ -350,8 +381,20 @@ module scope_xy #(
     logic [7:0] core_delay, core_previous, core_center;
     logic [7:0] vertical_q, vertical_previous, vertical_older, halo_q;
     logic [3:0] visible_pipe;
-    logic [8:0] green_sum;
-    always_comb green_sum={1'b0,core_center}+{1'b0,settings[3]?halo_q>>2:8'd0};
+    // Bloom adds the halo to the two channels the beam is not using, which is
+    // the only place it cannot saturate: adding it to green on a green trace
+    // pins at 255 and shows nothing, which is what the first version did.
+    // Colour selection (bits 11:10) is not implemented in this image; the beam
+    // stays the green phosphor.
+    wire [8:0] beam = {1'b0, core_center};
+    wire [8:0] bloom_b = {1'b0, settings[4] ? 8'(halo_q >> 1) : 8'd0};
+    wire [8:0] bloom_r = {1'b0, settings[4] ? 8'(halo_q >> 2) : 8'd0};
+    wire [8:0] red_sum   = {1'b0, core_center[7:3]} + bloom_r;
+    wire [8:0] green_sum = beam;
+    wire [8:0] blue_sum  = {1'b0, core_center[7:4]} + bloom_b;
+    wire [7:0] red_out   = red_sum[8]   ? 8'hff : red_sum[7:0];
+    wire [7:0] green_out = green_sum[8] ? 8'hff : green_sum[7:0];
+    wire [7:0] blue_out  = blue_sum[8]  ? 8'hff : blue_sum[7:0];
     always_ff @(posedge clk) begin
         visible_pipe<={visible_pipe[2:0],request_pixel && usable && cache_ready};
         above_q<=lane_q[{2'd0,read_x[2:0]}];
@@ -362,7 +405,7 @@ module scope_xy #(
         vertical_previous<=vertical_q; vertical_older<=vertical_previous;
         halo_q<=8'(({2'b0,vertical_older}+({2'b0,vertical_previous}<<1)+{2'b0,vertical_q})>>2);
         core_delay<=core_q; core_previous<=core_delay; core_center<=core_previous;
-        rgb<=visible_pipe[3]?{core_center>>3,green_sum[8]?8'hff:green_sum[7:0],core_center>>4}:24'd0;
+        rgb<=visible_pipe[3]?{red_out,green_out,blue_out}:24'd0;
         if(!resetn || !usable) begin
             visible_pipe<=0; rgb<=0; above_q<=0; core_q<=0; below_q<=0;
             vertical_q<=0; vertical_previous<=0; vertical_older<=0; halo_q<=0;
@@ -373,7 +416,9 @@ module scope_xy #(
         status=0;
         status[0]=enabled; status[1]=!initializing; status[2]=drawing;
         status[3]=loading; status[4]=cache_ready;
-        status[16:8]=9'(fifo_level); status[23:20]=settings;
-        status[31:24]=age_clock;
+        // settings 31:16, the FIFO level 15:8, the flags 4:0.  The age clock
+        // moved out: sharing bit 24 with settings[4] is what made a bloom
+        // write read back as off.
+        status[15:8]=fifo_level[7:0]; status[31:16]=settings;
     end
 endmodule
