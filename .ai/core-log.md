@@ -494,3 +494,33 @@ Continue with HDMI player UI and visualizer integration. On the next FPGA build 
 - User Test: PASS
 
 ---
+
+## 12 COMMIT Unreleased 2026-10-20T19:24:10-07:00
+
+#### Coming From:
+
+Unreleased e5a3295
+
+#### Purpose:
+
+Qualify full-track completion for the codecs and corpus files that entry 11 did not play to their end.
+
+#### Outcome:
+
+On the qualified seed 6 image `/root/cores/console138k/tinyphosphor_e8_known.bin` with entry 11's one-track resident player at `/root/ae350/resident.tpi` and `/tang.ini` declaring the Pmod I2S2 on PMOD1, blocking `phosphor play` runs of `test.ogg`, `test.m4a`, `test.wv`, `test.ac3`, `test.tta` and `test.mp2` from `/root/media/music` each returned by itself between 13.6 and 14.1 seconds with playback complete, zero underruns and player result `0x600d0000`. Vorbis, ALAC, WavPack and TTA produced 480,002 samples at 48000 Hz, AC-3 produced 481,491 and MP2 479,714, and `0x4020` read `0x00010001` after every track. With entry 11's WAV, FLAC, MP3, AAC, Opus and WMA runs, all eleven Rockbox codecs and all twelve corpus files have now played to their end and stopped on the deployed player. The user reported PASS: every track ended cleanly on both the Pmod I2S2 and the MAX98357A speaker. No source change was required. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 12 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Continue with HDMI player UI and visualizer integration. On the next FPGA build cycle, resolve the boot ROM reproducibility gap recorded in entry 10 by qualifying the `HEAD` boot ROM on hardware or recovering the source of the qualified ROM.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: PASS
+
+---
