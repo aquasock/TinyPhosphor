@@ -524,3 +524,33 @@ None.
 - User Test: PASS
 
 ---
+
+## 13 COMMIT Unreleased 2026-10-20T19:37:33-07:00
+
+#### Coming From:
+
+Unreleased 241a9ff
+
+#### Purpose:
+
+Survey the HDMI player UI and visualizer state and qualify the XY scope on hardware as the first step of the TinyTang desk-layer UI direction.
+
+#### Outcome:
+
+The survey found that the HDMI picture is the 96x64 frame store scaled by 11, filled only by `src/ui/ui_menu_renderer.sv` slice 1's address-encoded pattern, replaced by `src/visualizers/scope_xy.sv` when bit 0 of `0xac` is set, and covered by TinyTang's 80x45 desk layer when its overlay is on; `src/phosphor_video.sv` and `src/ui/phosphor_album_ui.sv` are in the source list but not instantiated, the `src/ui/phosphor_ui_control.sv` text, playlist, length, visibility and artwork registers feed nothing, album art was never implemented, and TinyTang never writes `0xac`. The user chose option A, a player UI in TinyTang's existing TinyDesk Phosphor app over the FPGA picture, rather than a native FPGA now-playing screen. On the qualified seed 6 image reloaded after a power cycle, with `/tang.ini` declaring the Pmod I2S2 on PMOD1, `phosphor poke 0xac 1` enabled the scope with `0xb4` reporting enabled and initialised, and `scope-circle-48000.wav`, `scope-lissajous-48000.wav` and `scope-diagonal-48000.wav` each played 192,000 samples at 48000 Hz with zero underruns, ended by themselves, and left the dropped-sample counter `0xb0` at zero; the user reported a perfect circle, a correct Lissajous figure and a correct diagonal, then PASS for `Special D. - Come with me.mp3` on the scope. A limitation was found: the resident player holds the whole file in its 4 MiB `INPUT_LIMIT` region at `0x41800000` and never starts a track larger than that, so `Crazy.mp3` at 7,460,996 bytes, most of `/root/media/music`, and the 49 MB 44.1 kHz `1 Function.flac` from N-Spheres cannot play. No source change was made. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 13 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Make the resident player stream its input through a bounded window in `software/rbhost/host/platform_ae350.c` so tracks of any size play, keeping the backward seeks some codecs make, and qualify it on files above 4 MiB including `Crazy.mp3` and `1 Function.flac`. Then qualify TinyTang's TinyDesk Phosphor app against TinyPhosphor end to end, including auto-advance, and have the scope enabled during playback. The boot ROM reproducibility gap and the speaker headroom test remain for the next FPGA build cycle.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: PASS
+
+---
