@@ -554,3 +554,33 @@ None.
 - User Test: PASS
 
 ---
+
+## 14 COMMIT Unreleased 2026-10-20T20:12:31-07:00
+
+#### Coming From:
+
+Unreleased d3f4fec
+
+#### Purpose:
+
+Let the resident AE350 player stream tracks of any size instead of refusing any file larger than its 4 MiB input region.
+
+#### Outcome:
+
+`software/rbhost/host/platform_ae350.c` now treats the 4 MiB input region at `0x41800000` as a direct-mapped cache of 64 slots of 64 KiB, chunk c in slot c % 64: `_read` copies through the cache a chunk at a time and fetches a missing chunk on demand, the background prefetch keeps the 48 chunks from the latest read resident, the 16 chunks behind them stay for short seeks back, a read outside the window such as an MP4 index is fetched on demand, chunk 0 stays at `INPUT_BASE` for the format probe, and `wait_for_track()` accepts any 32-bit size; the `BENCH_STREAM=1` image keeps its contiguous buffer. TinyTang's `fpga_file_stream` already switches the link to 5 Mbaud for each answer, as Tang-PSX does, because TinyPhosphor reports the baud-switch capability. The resident image rebuilt with `make bench-ondemand BENCH_NAME=tinyphosphor` to 844,932 payload bytes, crc32 `7c007b8b`, `.tpi` SHA-256 `cb77d0d309e143e7457614573749dea86fd4c31acd9a58cca6abd02db0afbeca`, and replaced `/root/ae350/resident.tpi`, with entry 11's image kept as `/root/ae350/resident.tpi.bak-e11`; the FPGA stayed on the qualified seed 6 image. All twelve corpus files played to their end with the same sample counts as entries 11 and 12 and zero underruns. `Crazy.mp3`, 7,460,996 bytes and 433.76 seconds at 44.1 kHz, returned by itself after 438.1 seconds with 20,821,384 samples at 48000 Hz against 20,820,637 expected, zero underruns and result `0x600d0000`; an earlier run stopped at 420 seconds by a too-short test limit recorded 194,025 link requests with no timeouts or errors. N-Spheres `1 Function.flac` at 44.1 kHz, 49,082,237 bytes and 7:23, was put on the card as `/root/media/music/function.flac` in 32 seconds and played with the XY scope enabled; the user reported PASS for the audio and the scope, and the log was committed at the user's request while the track was still playing, so its completion line is not recorded here. The MAX98357A speaker was disconnected from J5 for the long runs because its level is too loud for a full song, and the user judged the large files on the Pmod I2S2. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 14 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Qualify TinyTang's TinyDesk Phosphor app against TinyPhosphor end to end, including browse, play, pause, stop, next and auto-advance, and have the XY scope enabled during playback. On the next FPGA build cycle, resolve the boot ROM reproducibility gap from entry 10 and add a speaker-only attenuation or volume register for the MAX98357A, whose level is too loud for full songs.
+
+#### Files Modified:
+
+- software/rbhost/host/platform_ae350.c
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---

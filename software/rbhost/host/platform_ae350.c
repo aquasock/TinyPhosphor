@@ -115,10 +115,15 @@ extern const uint32_t bench_play;
  * The player asks the BL616 for its track with a request of length 0
  * (QUERY_NEXT), which is answered with the track's size, 0 while nothing is
  * queued, or ANSWER_STOP, and then requests the track's bytes in CHUNK_BYTES
- * pieces into INPUT_BASE at the file's own
- * offsets: a chunk a read is waiting for first, otherwise the next missing
- * chunk in order, so the whole file arrives in the background while the codec
- * works and seeks back cost nothing.  While a track decodes it also asks
+ * pieces: a chunk a read is waiting for first, otherwise the next missing
+ * chunk of the AHEAD_CHUNKS from the latest read, so the track arrives in the
+ * background while the codec works.  INPUT_BASE is a direct-mapped cache of
+ * INPUT_SLOTS chunks, chunk c in slot c % INPUT_SLOTS, so a track of any size
+ * plays: the window ahead never collides with itself, the INPUT_SLOTS -
+ * AHEAD_CHUNKS chunks behind it stay for short seeks back, and a read outside
+ * it, such as an MP4 index at the end of the file, is fetched on demand at the
+ * cost of one request.  Chunk 0 lives at INPUT_BASE, where the format is
+ * probed.  While a track decodes it also asks
  * every 100 ms whether to stop it (QUERY_POLL).  One request is outstanding
  * at a time, and its answer is drained from the stream FIFO a little at a
  * time by service(), which every wait and every output write calls, so
@@ -139,7 +144,9 @@ extern const uint32_t bench_play;
  * over, and returns.
  */
 #define CHUNK_BYTES   (64u << 10)
-#define MAX_CHUNKS    (INPUT_LIMIT / CHUNK_BYTES)
+#define INPUT_SLOTS   (INPUT_LIMIT / CHUNK_BYTES)   /* a power of two */
+#define AHEAD_CHUNKS  48u                       /* 3 MiB read ahead, 1 MiB kept behind */
+#define NO_CHUNK      0xffffffffu
 #define DRAIN_BUDGET  256u                      /* stream entries per call */
 #define REQUEST_RETRY (2u * AE350_TIME_HZ)      /* silence before asking again */
 #define POLL_TICKS    (AE350_TIME_HZ / 10u)
@@ -151,8 +158,9 @@ extern const uint32_t bench_play;
 #define RESIDENT_MAGIC 0x52455331u              /* "RES1" */
 #define TRACK_ABORTED  0xffffffffu
 
-static uint8_t chunk_ready[MAX_CHUNKS];
+static uint32_t slot_chunk[INPUT_SLOTS];   /* the chunk each slot holds, or NO_CHUNK */
 static uint32_t input_chunks;
+static uint32_t read_chunk;     /* the chunk of the latest read: the window's base */
 static uint32_t prefetch_chunk;
 static int32_t demand_chunk = -1;
 static uint32_t input_requests;
@@ -179,6 +187,16 @@ static uint32_t chunk_length(uint32_t chunk)
                                                    : CHUNK_BYTES;
 }
 
+static uint8_t *chunk_slot(uint32_t chunk)
+{
+    return INPUT_BASE + (chunk & (INPUT_SLOTS - 1u)) * CHUNK_BYTES;
+}
+
+static int chunk_ready(uint32_t chunk)
+{
+    return slot_chunk[chunk & (INPUT_SLOTS - 1u)] == chunk;
+}
+
 static void begin_request(void)
 {
     rx.active = 1;
@@ -192,6 +210,8 @@ static void request_chunk(uint32_t chunk)
     begin_request();
     rx.query = 0;
     rx.chunk = chunk;
+    /* The answer overwrites the slot, whatever it held. */
+    slot_chunk[chunk & (INPUT_SLOTS - 1u)] = NO_CHUNK;
     ae350_request(chunk * CHUNK_BYTES, chunk_length(chunk));
     ++input_requests;
 }
@@ -240,7 +260,7 @@ static void drain_answer(void)
             } else if (rx.received < CHUNK_BYTES) {
                 /* Chunks start word-aligned; only the file's last chunk ends
                  * in a padded word, inside its own CHUNK_BYTES slot. */
-                *(uint32_t *)(INPUT_BASE + rx.chunk * CHUNK_BYTES + rx.received) = data;
+                *(uint32_t *)(chunk_slot(rx.chunk) + rx.received) = data;
             }
             rx.received += 4u;
         } else if (rx.query) {
@@ -256,7 +276,7 @@ static void drain_answer(void)
             /* A short END or a CANCEL leaves the chunk to be asked for
              * again. */
             if (tag == AE350_TAG_END && data == chunk_length(rx.chunk))
-                chunk_ready[rx.chunk] = 1;
+                slot_chunk[rx.chunk & (INPUT_SLOTS - 1u)] = rx.chunk;
             rx.active = 0;
             return;
         }
@@ -278,12 +298,19 @@ static void service_input(void)
     if (!input_chunks)
         return;
     uint32_t chunk;
-    if (demand_chunk >= 0 && !chunk_ready[demand_chunk]) {
+    if (demand_chunk >= 0 && !chunk_ready((uint32_t)demand_chunk)) {
         chunk = (uint32_t)demand_chunk;
+        /* A fetch outside the window can evict a chunk inside it that the
+         * cursor has passed; look again from the window's base. */
+        prefetch_chunk = read_chunk;
     } else {
-        while (prefetch_chunk < input_chunks && chunk_ready[prefetch_chunk])
+        uint32_t end = input_chunks - read_chunk > AHEAD_CHUNKS
+                           ? read_chunk + AHEAD_CHUNKS : input_chunks;
+        if (prefetch_chunk < read_chunk || prefetch_chunk > end)
+            prefetch_chunk = read_chunk;
+        while (prefetch_chunk < end && chunk_ready(prefetch_chunk))
             ++prefetch_chunk;
-        if (prefetch_chunk >= input_chunks)
+        if (prefetch_chunk >= end)
             return;
         chunk = prefetch_chunk;
     }
@@ -301,7 +328,7 @@ static void service(void)
 static void wait_for_chunk(uint32_t chunk)
 {
     demand_chunk = (int32_t)chunk;
-    while (!chunk_ready[chunk])
+    while (!chunk_ready(chunk))
         service();
     demand_chunk = -1;
 }
@@ -528,13 +555,26 @@ int _read(int fd, void *buffer, size_t count)
         return 0;
     if (count > file->size - position)
         count = file->size - position;
-    if (file == &stream_file && input_chunks && count) {
-        uint32_t last = (position + (uint32_t)count - 1u) / CHUNK_BYTES;
-        for (uint32_t chunk = position / CHUNK_BYTES; chunk <= last; ++chunk)
-            if (!chunk_ready[chunk])
+    if (file == &stream_file && input_chunks) {
+        /* Through the cache, a chunk at a time: the next chunk's wait may
+         * reuse the slot of one already copied, never the one being read. */
+        uint8_t *out = buffer;
+        for (uint32_t done = 0; done < count;) {
+            uint32_t at = position + done;
+            uint32_t chunk = at / CHUNK_BYTES;
+            uint32_t offset = at % CHUNK_BYTES;
+            uint32_t run = CHUNK_BYTES - offset;
+            if (run > count - done)
+                run = (uint32_t)count - done;
+            read_chunk = chunk;
+            if (!chunk_ready(chunk))
                 wait_for_chunk(chunk);
+            memcpy(out + done, chunk_slot(chunk) + offset, run);
+            done += run;
+        }
+    } else {
+        memcpy(buffer, file->data + position, count);
     }
-    memcpy(buffer, file->data + position, count);
     files[fd].position = position + count;
     return (int)count;
 }
@@ -747,7 +787,7 @@ static uint32_t wait_for_track(void)
             play_cancel();
             continue;
         }
-        if (answer && answer <= INPUT_LIMIT)
+        if (answer)
             return answer;
         uint32_t start = AE350_REG(AE350_TIME_LOW);
         while (AE350_REG(AE350_TIME_LOW) - start < IDLE_TICKS) {
@@ -760,9 +800,11 @@ static uint32_t wait_for_track(void)
 /* Decode one track of `size` bytes into the play stream. */
 static void run_track(uint32_t size)
 {
-    memset(chunk_ready, 0, sizeof(chunk_ready));
+    for (uint32_t i = 0; i < INPUT_SLOTS; ++i)
+        slot_chunk[i] = NO_CHUNK;
     input_stream_size = size;
-    input_chunks = (size + CHUNK_BYTES - 1u) / CHUNK_BYTES;
+    input_chunks = (uint32_t)(((uint64_t)size + CHUNK_BYTES - 1u) / CHUNK_BYTES);
+    read_chunk = 0;
     prefetch_chunk = 0;
     demand_chunk = -1;
     for (int fd = 3; fd < MAX_FILES; ++fd)
