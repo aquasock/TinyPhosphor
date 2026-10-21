@@ -464,3 +464,33 @@ None.
 - User Test: PASS
 
 ---
+
+## 11 COMMIT Unreleased 2026-10-20T19:20:37-07:00
+
+#### Coming From:
+
+Unreleased 8127626
+
+#### Purpose:
+
+Make tracks on the resident AE350 player end by themselves instead of repeating until stopped.
+
+#### Outcome:
+
+A register trace of `test.wav` showed the decoder finishing each pass correctly, with `USER(3)` at 480,002 samples, while `USER(1)` tracks begun and `USER(2)` tracks finished kept climbing, `0x4020` stayed at run count 0 and `0x5c` stayed in the playing state: the resident player inherited from Tang-Phosphor never returned and asked for its next track with `QUERY_NEXT`, but TinyTang's file server answers every length-0 request with the size of the file it is serving, so the same track was handed back and played forever, and TinyTang, which counts a track complete only when the program returns and the sink completes, never saw an end. This has probably been present since entry 6; entry 7's 1,753,721 samples were about 3.6 passes of the file, and entry 9's ten-second windows hid it. `software/rbhost/host/platform_ae350.c` now plays one track per load: `resident_main()` takes the track, hands the rest of its PCM to the FPGA player after the decode, publishes the finished track, ends the play stream, drains any outstanding answer and returns `0x600d0000` with the decode status, so the boot ROM counts the run; stops still arrive as TinyTang's AE350 restart. The gapless multi-track queue is no longer used. The resident image rebuilt with `make bench-ondemand BENCH_NAME=tinyphosphor` to 844,772 payload bytes, crc32 `0d4a0a1d`, `.tpi` SHA-256 `3e9517042b4471ed16512f0c458e874191450b0a538f2ababf15819a1ee70210`, and replaced `/root/ae350/resident.tpi` on the card, with entry 7's image kept as `/root/ae350/resident.tpi.bak-e7`; the FPGA stayed on the qualified seed 6 image `/root/cores/console138k/tinyphosphor_e8_known.bin`. Blocking `phosphor play` runs of `test.wav`, then FLAC, MP3, AAC in MP4, Opus, WMA and WAV back to back, each returned by itself with playback complete and zero underruns, with 480,002 samples for WAV, FLAC, MP3 and AAC, 479,688 for Opus with result `0x600d0001` (the known trailing codec status after a complete decode), and 481,491 for WMA; `0x4020` read `0x00010001` after every track. The user reported PASS: every track ended cleanly on both the Pmod I2S2 and the MAX98357A speaker. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 11 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Continue with HDMI player UI and visualizer integration. On the next FPGA build cycle, resolve the boot ROM reproducibility gap recorded in entry 10 by qualifying the `HEAD` boot ROM on hardware or recovering the source of the qualified ROM.
+
+#### Files Modified:
+
+- software/rbhost/host/platform_ae350.c
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---

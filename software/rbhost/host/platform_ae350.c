@@ -10,14 +10,13 @@
  * be compared with the same decode under qemu-riscv32.  stdout and stderr
  * go to the log ring.
  *
- * An image built with BENCH_STREAM=2 (make bench-ondemand) is a resident
- * player: it embeds no input and never returns, but asks the BL616 for one
- * track after another and reads each on demand, chunk by chunk, through the
- * file-request mailbox (ae350_request.h).  With BENCH_PLAY=1 it also plays
- * the output as the codec writes it, from a ring in the output buffer, and
- * keeps the play stream open between tracks of the same rate, so a track
- * starts after its first chunks and the next follows without a gap.  See
- * "On-demand input and the resident player" below.
+ * An image built with BENCH_STREAM=2 (make bench-ondemand) is the resident
+ * player: it embeds no input, but asks the BL616 for a track and reads it on
+ * demand, chunk by chunk, through the file-request mailbox (ae350_request.h).
+ * With BENCH_PLAY=1 it also plays the output as the codec writes it, from a
+ * ring in the output buffer, so a track starts after its first chunks.  It
+ * plays one track per load and returns once that track has all been handed
+ * to the FPGA player.  See "On-demand input and the resident player" below.
  *
  * Result registers:
  *   USER(0)      rbhost exit status
@@ -113,10 +112,10 @@ extern const uint32_t bench_play;
 /*
  * On-demand input and the resident player (bench_stream == 2).
  *
- * The player does not return after a track.  It asks the BL616 for its next
- * track with a request of length 0 (QUERY_NEXT), which is answered with the
- * track's size, 0 while nothing is queued, or ANSWER_STOP, and then requests
- * the track's bytes in CHUNK_BYTES pieces into INPUT_BASE at the file's own
+ * The player asks the BL616 for its track with a request of length 0
+ * (QUERY_NEXT), which is answered with the track's size, 0 while nothing is
+ * queued, or ANSWER_STOP, and then requests the track's bytes in CHUNK_BYTES
+ * pieces into INPUT_BASE at the file's own
  * offsets: a chunk a read is waiting for first, otherwise the next missing
  * chunk in order, so the whole file arrives in the background while the codec
  * works and seeks back cost nothing.  While a track decodes it also asks
@@ -130,6 +129,14 @@ extern const uint32_t bench_play;
  * USER(4) the decode status of the latest finished track (TRACK_ABORTED for
  * one stopped part way).  A track is finished once all of it has been handed
  * to the FPGA player.
+ *
+ * TinyTang answers every length-0 request with the size of the file it is
+ * serving, whatever its opcode, and sends the player again for each track; it
+ * counts a track complete when the program returns (the loader's run count in
+ * AE350_STATE bits 31:16) and the sink reports complete.  A player that asked
+ * for a next track would be handed the same file and play it forever, so the
+ * player takes one track, ends the play stream once all of it has been handed
+ * over, and returns.
  */
 #define CHUNK_BYTES   (64u << 10)
 #define MAX_CHUNKS    (INPUT_LIMIT / CHUNK_BYTES)
@@ -800,15 +807,31 @@ static void run_track(uint32_t size)
     ae350_puts("\n");
 }
 
-/* The resident player: one track after another, until the AE350 is restarted. */
-static __attribute__((noreturn)) void resident_main(void)
+/* The resident player: one track, handed over in full, then back to the boot
+ * ROM, which counts the run.  A stop arrives as an AE350 restart. */
+static uint32_t resident_main(void)
 {
     for (int i = 0; i < 13; ++i)
         AE350_REG(AE350_USER(i)) = 0;
     AE350_REG(AE350_USER(0)) = RESIDENT_MAGIC;
     ae350_puts("resident\n");
-    for (;;)
-        run_track(wait_for_track());
+    run_track(wait_for_track());
+
+    /* The decode runs ahead of the player by up to the ring; hand the rest
+     * over, finish the track and end the stream so the sink can complete.  A
+     * trailing partial word cannot be played and does not hold the end. */
+    while (play_position + 4u <= pcm_written)
+        service_output();
+    for (uint32_t i = 0; i < boundary_count; ++i)
+        publish_finished(boundaries[i].samples, boundaries[i].status);
+    boundary_count = 0;
+    end_stream_if_played();
+    /* Let an outstanding answer arrive rather than leave it in the stream
+     * FIFO for the boot ROM. */
+    while (rx.active)
+        drain_answer();
+    ae350_puts("returned\n");
+    return 0x600d0000u | ((uint32_t)exit_status & 0xffffu);
 }
 
 /* Called by crt0_ae350.S after .bss is cleared. */
@@ -817,7 +840,7 @@ uint32_t ae350_main(void)
     uint32_t input_size = 0;
 
     if (bench_stream == 2u) {
-        resident_main();
+        return resident_main();
     } else if (bench_stream) {
         input_size = receive_stream_file();
     } else {
