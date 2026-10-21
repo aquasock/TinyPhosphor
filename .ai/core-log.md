@@ -680,3 +680,33 @@ Make the XY scope come up without a shell poke, either by defaulting `scope_cont
 - User Test: PASS
 
 ---
+
+## 18 COMMIT Unreleased 2026-10-21T05:49:44-07:00
+
+#### Coming From:
+
+Unreleased 589f495
+
+#### Purpose:
+
+Make the XY scope the picture as soon as the core loads, instead of waiting for a shell `phosphor poke 0xac 1`.
+
+#### Outcome:
+
+`src/debug/debug_regs.sv` now resets `scope_control` to `4'b0001` instead of zero. Bit 0 is the scope enable in `src/visualizers/scope_xy.sv`, and `src/video/ui_hdmi_backend.sv` selects the scope's pixels over the 96x64 colour pattern while it is set, so a fresh `tangload`, which writes no registers, previously left the picture on the colour pattern until a host wrote `0xac`. Trails and glow, bits 2:1 and bit 3, keep their zero defaults and a host can still override the whole word. The netlist is unchanged in size at 32,260 cells, but the constant moved placement enough that the eight-seed sweep passed only seed 4, the other seven failing the GB20 branch rule; seed 4 passed every gate with `clk_pixel` 92.234 MHz against 74.25, `clk12` 99.226 MHz, `bus_clk` 155.79 MHz against 75, no hold violations, no GB20 branch, six PLLs, four OSER10s and 205 two-clock-capable block RAMs. The packed artifacts are `build/ae350_e18/sweep/seed-4/tiny_phosphor_ae350_player.bin`, 5,063,660 bytes with SHA-256 `8e81fc985bc733bc5f3d174d96bd53611b0e26345d50ad10d4a66f367e5747af`, and `tiny_phosphor_ae350_player.fs` with SHA-256 `41db25d32646539a77afdf6c28d172251bce975561b00734a09f607d2050bded`. The `.bin` was put at `/root/cores/console138k/tinyphosphor_e18.bin` with TinyTang's `tinytang_put.py` and loaded with `tangload`, which declared `0xc0 = 0x0500`; core 80 answered, `0xac` read `0x00000001` with no host write, `0xf8` read `0x0012c000` and `0xfc` read `0x0000001f`, so the audio PLL again locked on its first pulse with zero retries. Playing `scope-circle-48000.wav` completed with 192,000 samples, zero underruns and result `0x600d0000`, advanced the sweep counter `0xb8` from 10,267 to 14,057 over the four-second track, and left the dropped-sample counter `0xb0` at zero, which shows the scope drawing from the reset default. The user reported PASS for the scope coming up by itself over the HDMI picture. `.ai/core-reference.md` gained a record stating that the scope enable is a reset default rather than a host step, because `tangload` writes no registers and TinyTang's Phosphor window has no scope control. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 18 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+The scope default is qualified; the next visualizer work is trails and glow, which are reachable only by writing `0xac` bits 2:1 and bit 3 and have no control in TinyTang's Phosphor window yet, so a host-side control is the remaining UI gap alongside album art. Restoring runtime 44.1/48 kHz PLL switching would remove the fixed-48 kHz resampling, and the speaker stays in shutdown while the Pmod I2S2 and HDMI audio remain the priority outputs.
+
+#### Files Modified:
+
+- src/debug/debug_regs.sv
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---

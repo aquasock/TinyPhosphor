@@ -439,6 +439,13 @@ them. New TinyPhosphor decisions are labelled `TinyPhosphor use`.
 - Relevant rule: O-Scope maps left PCM to X and right PCM to Y, connects successive points, and applies phosphor persistence on a 256x256 three-bit plane. Waveforms is the separate time-domain visualizer. Its visual-only 2x, 15-tap half-band reconstruction uses symmetric Q1.15 coefficient pairs -240, 1064, -4500 and 20060. Observation queues may discard visual work without backpressuring playback.
 - Tang-Phosphor use: The hardware-qualified scope uses a 512x512 timestamp plane, eight-bit display brightness, selectable trails and glow, with an emitted-pair presence tag distinguishing real zero PCM from synthetic silence. ABI 1.10 exposes its controls and diagnostics. Its first build failed timing in the brightness-to-cache path (entry 79); the pipelined brightness, lane-memory cache and registered control paths met timing at placement 3 (entry 81), and computing `request_pixel` and `read_x` one clock ahead of `cx` with `usable` and `clear_all` registered away from the top-level reset met timing at placements 1 and 2, with no scope path failing at any placement (entry 82, `docs/oscope-handoff.md`).
 
+### Scope enable is a reset default, not a host step
+
+- Sources: `src/debug/debug_regs.sv` (`scope_control` reset value and the `0xac` write decode); `src/visualizers/scope_xy.sv` (`enabled = settings[0]`, settings reloaded at frame start when it differs from the control word); `src/video/ui_hdmi_backend.sv` (`selected_picture = scope_enabled ? scope_rgb : picture_rgb`).
+- Authority: Project decision agreed with the user on 2026-10-21.
+- Relevant rule: the XY scope is the player's picture, so `scope_control` resets to `4'b0001`. Bit 0 is the enable; with it clear the HDMI picture falls back to the 96x64 colour pattern. A `tangload` writes no register, and TinyTang's Phosphor window has no scope control, so a zero reset value left the scope off until a shell `phosphor poke 0xac 1`.
+- TinyPhosphor use: the reset value is the contract, so no host step may be required to see the scope after a load. Trails and glow (bits 2:1 and bit 3) keep their zero defaults, and a host that wants a different picture still writes `0xac`.
+
 ### Gowin true dual-port BSRAM modes and collision regions
 
 - Sources: Installed `/home/vash/tools/gowin-1.9.11.03/IDE/doc/EN/UG300-1.3.6E_Arora V BSRAM & SSRAM User Guide.pdf`, tables 2-1/2-3 and section 3.1; `/home/vash/tools/gowin-1.9.11.03/IDE/simlib/gw5a/prim_sim.v`, `DPX9B` model.

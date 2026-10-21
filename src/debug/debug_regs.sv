@@ -121,7 +121,12 @@ always @(posedge clk) begin
         pmod1_flipped     <= 1'b0;
         render_hold       <= 1'b0;
         cpu_mode          <= 1'b0;
-        scope_control     <= 4'b0;
+        // The XY scope is the player's picture, so it comes up enabled: with
+        // bit 0 clear the HDMI picture falls back to the colour pattern until
+        // a host writes 0xac, which a fresh tangload never does.  The other
+        // three bits keep their zero defaults, so trails and glow stay as the
+        // ring buffer's quiet state until something selects them.
+        scope_control     <= 4'b0001;
     end else begin
         uptime_cycles <= uptime_cycles + 1'b1;
         if (frame_tick)
