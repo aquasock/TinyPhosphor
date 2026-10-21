@@ -647,3 +647,36 @@ Make the I2S2 audio PLL lock reliable before any other FPGA change: in `src/audi
 - User Test: NOT RUN
 
 ---
+
+## 17 COMMIT Unreleased 2026-10-21T05:27:53-07:00
+
+#### Coming From:
+
+Unreleased 8cbd0de
+
+#### Purpose:
+
+Make the I2S2 audio PLL lock reliably in every open-flow image so the Pmod I2S2 and HDMI audio always have a clock.
+
+#### Outcome:
+
+`src/audio/i2s_clock_control.sv` no longer pulses the audio PLL reset on a fixed delay: it holds `pll_reset` asserted until the synchronised reference lock arrives, waits 20 ms (1,485,000 `clk_pixel` cycles) in `LOCK` before re-pulsing and counting a retry, and reloads that window when lock drops from `SETTLE` or `RUN`, so a failing image now reports retries instead of waiting forever. `src/tang_phosphor_top.sv` and `src/debug/debug_regs.sv` expose the saturating 8-bit retry count in bits 15:8 of `0xfc`, leaving bits 5:0 unchanged, and the register ABI moves from 1.11 to 1.12. The cycle's first build used the local `~/tools/oss-cad-suite-20260925` tree (Yosys 0.69+152) and failed place and route on all eight seeds with `no BELs remaining to implement cell type '$buf'`; reverting every source change reproduced the same 19 partial-driver `$buf` cells, so the RTL was not at fault, and rebuilding with the suite the scripts default to (`$HOME/oss-cad-suite`, Yosys 0.69+260) produced a clean netlist of 32,260 cells. `tools/open/check_netlist.py` now fails the build when the top module still holds generic `$` cells other than `$scopeinfo`, naming the toolchain cause, and was verified to pass the real netlist and fail an injected `$buf`. The boot ROM rebuilt to its reproducible hash `735130b9…`, the eight-seed sweep passed seeds 2 and 6 with six seeds failing the GB20 branch rule, and seed 6 won with `bus_clk` 148.544 MHz against 75, `clk_pixel` 101.112 MHz against 74.25, the `AE350_CORE_CLK_PLLR0` hop present, no GB20 branch, six PLLs, four OSER10s, 205 two-clock-capable block RAMs and no hold violations. The packed artifacts are `build/ae350_e17/sweep/seed-6/tiny_phosphor_ae350_player.bin`, 5,063,660 bytes with SHA-256 `19b2c0a80638e8bdb7e6622bf8f837bdb384ec2f32c7ef1c7180bafce6216e68`, and `tiny_phosphor_ae350_player.fs`, 40,542,949 bytes with SHA-256 `e17d6a701f04bde599ab6b982323a8d86f586a67c2b65339879467f6d97ce038`. The `.bin` was put at `/root/cores/console138k/tinyphosphor_e17.bin` over the console with TinyTang's `tinytang_put.py` and loaded with `tangload`, which declared `0xc0 = 0x0500` from `/tang.ini`; core 80 answered, `0x43e0` read `0x0000001b`, `0xf8` read `0x0012c000`, and `0xfc` read `0x0000001f`, so the audio PLL locked on its first pulse with zero retries on a netlist family that had never locked, confirming the start-up race. The HDMI audio cadence was measured for the first time: `0x2c` read `0xbb80bb80` during `function.flac`, 48,000 audio frames per second with all 48,000 carrying a sample. `test.flac` and `test.mp3` each completed with 480,002 samples, zero underruns and result `0x600d0000`, `0x6c` stayed at zero, and `0x4020` read `0x00010001`, which also completes the `HEAD` boot ROM's qualification on hardware and closes the reproducibility gap recorded in entry 10. After the load the picture showed only the 96x64 color pattern because the scope enable at `0xac` bit 0 resets with the core and nothing sets it; `phosphor poke 0xac 1` brought the visualizer up. The user reported PASS for the Pmod I2S2, for HDMI audio, which had never been verified before, and for the picture and the scope. The old toolchain tree was deleted at the user's direction because Tang-Phosphor is retired. `.ai/core-reference.md` gained a record for the `$buf` toolchain gate and its PLL record moved from open to resolved with the hardware evidence. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 17 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Make the XY scope come up without a shell poke, either by defaulting `scope_control` bit 0 at reset or by giving TinyTang's Phosphor window a scope toggle, then qualify that on hardware. The speaker stays in shutdown: its level control is no longer blocked on the PLL, but the Pmod I2S2 and HDMI audio are the priority outputs and the amplifier sounds poor off the Tang. Restoring runtime 44.1/48 kHz PLL switching would remove the fixed-48 kHz resampling, and the remaining UI work is album art, which is still unimplemented.
+
+#### Files Modified:
+
+- src/audio/i2s_clock_control.sv
+- src/debug/debug_regs.sv
+- src/tang_phosphor_top.sv
+- tools/open/check_netlist.py
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---

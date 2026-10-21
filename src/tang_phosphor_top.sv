@@ -119,6 +119,7 @@ reg resetn /* synthesis syn_maxfan = 32 */ = 1'b0;
 wire clk_i2s2_ref, clk_i2s2_mclk;
 wire i2s2_ref_locked, i2s2_audio_locked;
 wire i2s2_pll_reset, i2s2_running, i2s2_ready, i2s2_active_48k;
+wire [7:0] i2s2_retries;
 wire [6:0] i2s2_mdsel, i2s2_odsel;
 wire [2:0] i2s2_mdsel_frac, i2s2_odsel_frac;
 pll_i2s2_ref i2s2_reference_clock (
@@ -139,11 +140,15 @@ i2s_clock_control i2s2_rate_control (
     .pll_locked({i2s2_audio_locked, i2s2_ref_locked}),
     .pll_reset(i2s2_pll_reset), .mdsel(i2s2_mdsel), .mdsel_frac(i2s2_mdsel_frac),
     .odsel(i2s2_odsel), .odsel_frac(i2s2_odsel_frac),
-    .active_48k(i2s2_active_48k), .running(i2s2_running), .ready(i2s2_ready)
+    .active_48k(i2s2_active_48k), .running(i2s2_running), .ready(i2s2_ready),
+    .retries(i2s2_retries)
 );
 wire [31:0] i2s2_mclk_count;
 wire [2:0] i2s2_probe_status;
-wire [5:0] i2s2_clock_status = {!i2s2_ready, i2s2_ready, i2s2_active_48k, i2s2_probe_status};
+// 0xfc: bits 5:0 unchanged, retry count at 15:8 (register ABI 1.12).
+wire [31:0] i2s2_clock_status = {16'b0, i2s2_retries,
+                                  !i2s2_ready, i2s2_ready, i2s2_active_48k,
+                                  i2s2_probe_status};
 i2s_clock_probe i2s2_clock_probe (
     .clk_ref(clk_pixel), .clk_mclk(clk_i2s2_mclk), .resetn(resetn),
     .pll_locked({i2s2_audio_locked, i2s2_ref_locked}),

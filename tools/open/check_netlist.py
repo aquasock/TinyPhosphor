@@ -73,6 +73,27 @@ def main(path: str, top: str, profile: str = "player") -> int:
         if counts.get(name):
             print(f"  {name:<10} {counts[name]}")
 
+    # nextpnr-himbaechel has no BEL for a generic Yosys cell.  The front end
+    # normally leaves none at the top, but Yosys 0.69+152 (slang bufNormalize)
+    # emits partial-driver `$buf` cells for this design, which reach placement
+    # and fail there with "no BELs remaining to implement cell type '$buf'" on
+    # every seed.  Catch it here, where the cause is still visible.
+    generic = sorted({cell.get("type", "") for cell in top_cells.values()
+                      if cell.get("type", "").startswith("$")
+                      and cell.get("type") != "$scopeinfo"})
+    if generic:
+        listed = Counter(cell.get("type") for cell in top_cells.values())
+        print("netlist kept generic cells nextpnr cannot place:",
+              file=sys.stderr)
+        for name in generic:
+            print(f"  {name}: {listed[name]}", file=sys.stderr)
+        print("these come from the Yosys/slang front end, not from the RTL.  "
+              "Rebuild with the suite the scripts default to "
+              "($HOME/oss-cad-suite, Yosys 0.69+260); Yosys 0.69+152 emitted "
+              "$buf cells for this design that no seed could place",
+              file=sys.stderr)
+        return 1
+
     missing = []
     for name, want in required.items():
         if counts.get(name, 0) < want:
