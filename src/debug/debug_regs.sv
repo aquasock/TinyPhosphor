@@ -77,6 +77,8 @@ module debug_regs (
     input  [5:0]  i2s2_clock_status,
     output reg [3:0] scope_control,
     input [31:0] scope_dropped, scope_status, scope_sweeps,
+    // HDMI audio frames per second at 0x2c, as hdmi_audio_cadence packs them.
+    input [31:0] hdmi_audio_cadence,
     output reg [3:0] pmod0_personality,
     output reg [3:0] pmod1_personality,
     output reg       pmod0_flipped,
@@ -175,7 +177,7 @@ always @(posedge clk) begin
     read_known_q <= read_known;
     case (read_index[4:0])
         5'd0: read_lo <= MAGIC;
-        5'd1: read_lo <= 32'h0001_000a; // register ABI 1.10: XY scope
+        5'd1: read_lo <= 32'h0001_000b; // register ABI 1.11: HDMI audio cadence
         5'd2: read_lo <= BUILD_DATE;
         5'd3: read_lo <= 32'h0000_00ff;
         5'd4: read_lo <= uptime_cycles;
@@ -185,6 +187,7 @@ always @(posedge clk) begin
         5'd8: read_lo <= scratch;
         5'd9: read_lo <= transport_crc_errors;
         5'd10: read_lo <= transport_bad_requests;
+        5'd11: read_lo <= hdmi_audio_cadence;
         5'd12: read_lo <= stream_sessions;
         5'd13: read_lo <= stream_bytes;
         5'd14: read_lo <= stream_ends;

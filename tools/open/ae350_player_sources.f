@@ -10,6 +10,7 @@ src/ae350_platform/ahb_ram.sv
 src/ae350_platform/ahb_sdram.sv
 src/audio/audio_output_policy.sv
 src/audio/i2s_clock_control.sv
+src/audio/hdmi_audio_cadence.sv
 src/audio/i2s_clock_probe.sv
 src/audio/i2s_playback.sv
 src/audio/i2s_tx.sv

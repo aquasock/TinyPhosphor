@@ -233,6 +233,24 @@ them. New TinyPhosphor decisions are labelled `TinyPhosphor use`.
 
 ---
 
+## Onboard Speaker Amplifier
+
+### MAX98357A I2S class-D amplifier on J5
+
+- Sources: Analog Devices (Maxim Integrated) MAX98357A/MAX98357B datasheet; `src/boards/console138k_ae350_player.cst` (BCLK Y17, LRCLK AB17, DIN AA16, SD_MODE/PA_EN Y14).
+- Authority: Device datasheet, plus hardware observation on this console on 2026-10-20. The board's GAIN_SLOT strapping and any SD_MODE divider are not confirmed from a schematic.
+- Relevant behavior: the MAX98357A takes standard I2S (the B part takes left-justified) at 8 to 96 kHz with 16-, 24- or 32-bit words and needs no MCLK, deriving its clocks from BCLK. The SD_MODE voltage selects the channel: above 1.4 V the left channel, 0.77 to 1.4 V the right, 0.355 to 0.77 V the mix (L+R)/2, and below 0.16 V shutdown. GAIN_SLOT sets a fixed gain of 3, 6, 9, 12 or 15 dB (unconnected is 9 dB). It delivers up to 3.2 W into 4 ohms from 5 V, so a full-scale digital stream drives a small speaker into audible overload.
+- TinyPhosphor use: the speaker is disabled. `src/tang_phosphor_top.sv` holds PA_EN low, which keeps the amplifier in shutdown, while BCLK, LRCLK and DIN still carry the Pmod I2S2 lane. Fed that full-scale lane, the speaker was too loud for a whole song and sounded scratchy. A separate mono data line attenuated in 6 dB steps was built on 2026-10-20 and removed again; a level control waits on a reliable I2S2 audio PLL lock (see "I2S2 audio PLL lock depends on the image (open)").
+
+### I2S2 audio PLL lock depends on the image (open)
+
+- Sources: Hardware runs on 2026-10-20 of seven TinyPhosphor open-flow images (core-log entry 16); `src/audio/i2s_clock_control.sv`; `src/tang_phosphor_top.sv` (`pll_i2s2_ref` on PLL_L[0] feeding `pll_i2s2_audio` on PLL_R[2]).
+- Authority: Hardware observation only; the cause is not found.
+- Relevant behavior: the audio PLL (24 MHz in, VCO 768 MHz, 12.288 MHz MCLK) locks in some images and never in others, the same way on every load and after a power cycle. Failing images read `0xfc = 0x2d` (reference PLL locked, audio PLL not, clock control waiting in LOCK) and an MCLK of about 9.74 MHz at `0xf8` (`0x000ee0xx` against `0x0012c000`), so the Pmod I2S2 and HDMI audio have no clock. Locking: the qualified entry 6 image and the entry 8 rebuild (old RTL, `HEAD` boot ROM), and a seed 6 build with only the HDMI cadence counter added. Failing: seed 1 and seed 6 of the speaker-line plus counter netlist, a seed 6 build with only the speaker line, and seed 1 of the speaker-off plus counter netlist. The PLL cells' parameters and attributes, the 24 MHz and 50 MHz input routes, the reset driver logic, and the cells in the PLL output tiles are identical between locking and failing images, so the trigger is placement-dependent rather than any one feature.
+- TinyPhosphor use: treat audio-PLL lock as a hardware gate for every new image: read `0xf8` and `0xfc` after `tangload` before any audio test. `i2s_clock_control` pulses the audio PLL reset once, about 1 ms after the pixel-clock reset releases, without waiting for the reference PLL lock, and never retries from LOCK. The leading hypothesis is a start-up race; the proposed fix holds the audio PLL in reset until the reference PLL reports lock, re-pulses it if lock does not arrive within about 20 ms, and exposes a retry count.
+
+---
+
 ## Dock PMOD Sockets
 
 ### Tang Console dock PMOD socket pins and numbering

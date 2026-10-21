@@ -22,6 +22,10 @@ make -C "$root/firmware/ae350" \
 [[ -f "$root/build/ae350/boot/ae350_boot.hex" ]] || {
     echo "missing ae350_boot.hex" >&2; exit 1;
 }
+# The ROM is baked into the bitstream, so record which one this build used:
+# a stale hex once shipped in a qualified image that HEAD did not reproduce.
+mkdir -p "$out"
+sha256sum "$root/build/ae350/boot/ae350_boot.hex" | tee "$out/boot_rom.sha256"
 
 export TOP="$top"
 export SOURCES="$root/tools/open/ae350_player_sources.f"

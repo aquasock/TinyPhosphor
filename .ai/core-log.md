@@ -613,3 +613,37 @@ None.
 - User Test: PASS
 
 ---
+## 16 COMMIT Unreleased 2026-10-20T23:34:06-07:00
+
+#### Coming From:
+
+Unreleased 9f58024
+
+#### Purpose:
+
+Rebuild the FPGA image to close the boot ROM reproducibility gap, give the MAX98357A speaker a level control and add an HDMI audio cadence counter, then qualify it on hardware.
+
+#### Outcome:
+
+The cycle did not produce a qualified image, because the I2S2 audio PLL stopped locking in the rebuilt images, and it ends here as an agent handoff at the user's request with the user test not run. The boot ROM gap from entry 10 is closed on the source side: `tools/open/ae350_player.sh` now writes the boot hex's SHA-256 to `<out>/boot_rom.sha256`, a fresh build of `firmware/ae350` into an empty directory reproduced `735130b92d342e5cfcf60120a957054710c0529f0aa343f89ac0590f7a42799f` exactly, and the entry 8 rebuild that carries this `HEAD` ROM (`build/ae350_entry8/seed-6`, `.bin` SHA-256 `76acfada…`) loaded on hardware with the AE350 at `0x1b` and the audio PLL locked (`0xf8 = 0x0012c000`, `0xfc = 0x1f`). Only `0x43e0` was read on it, so the `HEAD` ROM is shown to boot but has not yet started a player and played a track. The new `src/audio/hdmi_audio_cadence.sv` counts the audio frames handed to the HDMI packetizer per second of the 74.25 MHz pixel clock, all frames in bits 15:0 and frames carrying a sample in bits 31:16, read at `0x2c`, and the register ABI is 1.11. A speaker data line mixed to mono and shifted down in 6 dB steps by a register at `0xbc` was built: seed 6 failed the GB20 gate, a sweep of seeds 1 to 5 and 7 to 9 passed only seed 1 (`bus_clk` 151.0 MHz), and that image (`.bin` SHA-256 `99f91a6c…`) booted the AE350 but its audio PLL never locked, with `0xfc = 0x2d` and an MCLK near 9.74 MHz (`0xf8 = 0x000ee0xx`). Diagnostic seed 6 images that ignore the AE350 gates split the change: the HDMI counter alone locked, while the speaker line alone and the full netlist did not. At the user's direction the speaker was then disabled instead, with the line removed and PA_EN held low so the amplifier stays in shutdown while BCLK, LRCLK and DIN carry the Pmod lane as before, but that netlist's seed 1 passed every gate (`bus_clk` 163.4 MHz, no GB20 branch, `.bin` SHA-256 `4912041653a8c6efa899786776235d2b470d763c4ac909a24daa74cd1ff02070`) and its audio PLL also failed to lock, both on load and after a power cycle. Lock therefore depends on the image rather than on the speaker logic, and the PLL cells' parameters and attributes, input routes, reset driver and output tiles were compared and found identical between locking and failing images; the evidence and the leading start-up race hypothesis are recorded in `.ai/core-reference.md` under "I2S2 audio PLL lock depends on the image (open)", beside the new MAX98357A entry. The committed source is the speaker-off and counter design whose seed 1 build fails to lock, differing from that build only by a source comment, so it must not be deployed as is. The card holds that image as `/root/cores/console138k/tinyphosphor_e16.bin`, with diagnostic images `diag_e16_s6.bin`, `diag_e8_rebuild.bin`, `diag_vA.bin` and `diag_vB.bin` beside it; the qualified image remains `/root/cores/console138k/tinyphosphor_e8_known.bin`, and the board was left running the failing image. The HDMI cadence was never measured because no failing image has an audio clock. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 16 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Make the I2S2 audio PLL lock reliable before any other FPGA change: in `src/audio/i2s_clock_control.sv`, hold the audio PLL in reset until the reference PLL reports lock, re-pulse the reset if lock does not arrive within about 20 ms, and expose a retry count in the spare bits of `0xfc`; this change is proposed and awaits user approval. Rebuild seed 1, sweeping seeds if it fails the gates, and gate the image on `0xf8 = 0x0012c000` and `0xfc = 0x1f` after `tangload`; if it still fails to lock, the race hypothesis is wrong and the next step needs user approval. Then read `0x2c` during playback, expecting 48000 in each half, play a few corpus clips through the resident player to complete the `HEAD` boot ROM's qualification, and have the user test the Pmod I2S2 and HDMI audio and the Phosphor app before tagging v0.1.0. The speaker stays disabled; a level control can return once the lock is reliable.
+
+#### Files Modified:
+
+- src/audio/hdmi_audio_cadence.sv
+- src/debug/debug_regs.sv
+- src/tang_phosphor_top.sv
+- tools/open/ae350_player.sh
+- tools/open/ae350_player_sources.f
+- tools/open/sources.f
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: NOT RUN
+
+---

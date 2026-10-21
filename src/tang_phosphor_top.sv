@@ -210,6 +210,7 @@ wire [15:0] player_audio_right;
 wire pcm_sample_valid;
 wire emitted_sample_present;
 wire [3:0] scope_control;
+wire [31:0] hdmi_audio_cadence;
 wire [31:0] scope_dropped, scope_status, scope_sweeps;
 wire playback_active;
 wire [15:0] audio_sample_word [1:0];
@@ -450,13 +451,20 @@ i2s_playback audio_timebase (
     .hdmi_left(audio_sample_word[0]), .hdmi_right(audio_sample_word[1]),
     .lane_o(i2s2_play_lane_o), .lane_oe(i2s2_play_lane_oe)
 );
+hdmi_audio_cadence hdmi_cadence (
+    .clk_pixel(clk_pixel), .resetn(resetn),
+    .clk_audio(clk_audio), .sample_present(emitted_sample_present),
+    .cadence(hdmi_audio_cadence)
+);
 // The onboard MAX98357A takes the same BCLK/LRCK/DIN lane the Pmod I2S2
-// backend receives.  Its SD_MODE/PA_EN input is active high on this board;
-// hold the amplifier off until the audio clock and player reset are ready.
+// backend receives.  Its SD_MODE/PA_EN input is active high on this board.
+// The speaker is disabled: the amplifier is held in shutdown, because at full
+// scale it is too loud and distorts.  A level control waits on a reliable
+// I2S2 audio PLL lock (.ai/core-reference.md).
 assign i2s_bclk = i2s2_play_lane_o[2];
 assign i2s_lrck = i2s2_play_lane_o[1];
 assign i2s_dout = i2s2_play_lane_o[3];
-assign pa_en    = resetn && i2s2_ready;
+assign pa_en    = 1'b0;
 
 
 // The display stack, folded in whole.  This is the same module the socket
@@ -695,6 +703,7 @@ debug_regs debug_registers (
     .link_key1(link_keys[1]),
     .scope_control(scope_control), .scope_dropped(scope_dropped),
     .scope_status(scope_status), .scope_sweeps(scope_sweeps),
+    .hdmi_audio_cadence(hdmi_audio_cadence),
     .i2s2_mclk_count(i2s2_mclk_count),
     .i2s2_clock_status(i2s2_clock_status),
     .pmod0_personality(display_pmod0_personality),
