@@ -434,3 +434,33 @@ None.
 - User Test: PASS
 
 ---
+
+## 10 COMMIT Unreleased 2026-10-20T19:07:28-07:00
+
+#### Coming From:
+
+Unreleased 40b1d9c
+
+#### Purpose:
+
+Rebuild and redeploy entry 8's image and restore the Pmod I2S2 output, which had gone silent while the MAX98357A speaker still played.
+
+#### Outcome:
+
+A fresh `SEED=6 tools/open/ae350_player.sh build/ae350_entry8` from `40b1d9c` passed every gate with the same placement and timing as entry 6 (`bus_clk` 151.814 MHz, AE350 hop present, no GB20 branch), but its `.bin` is SHA-256 `76acfadac72800d1ef4723d741da9a1503c2c851ccdeb56bb67e409d43f0964b` against entry 6's `80150f8b14c36de3b3c3d1bd11baaaba8843fcf529629c1faed56e72bc492e9e`: the only netlist difference is the four `boot_rom.rom.0.*` block RAMs, where 81 instruction words between `0x2c` and `0x318` differ, with identical strings and range constants and 20 more bytes of code in the qualified ROM. `firmware/ae350/boot/boot.c` was last written at 15:24, after entry 5's commit, and entry 6's sweep reused a boot hex it never rebuilt, so the qualified image carries a boot ROM that `HEAD` does not reproduce; the `HEAD` rebuild has not been run on hardware. The resident player rebuilt byte-identical to entry 7 (844,508 payload bytes, crc32 `d7ff73ff`). The qualified seed 6 `.bin` was put on the card as `/root/cores/console138k/tinyphosphor_e8_known.bin` and loaded with `tangload`; core 80 answered, `0xf8` read `0x0012c000` and `0x43e0` read `0x0000001b`, and `test.wav` played on the speaker but not the Pmod. The cause was the card's `/tang.ini`, which a previous session had rewritten to declare `pmod0 = i2s2`, while the Pmod I2S2 is seated in PMOD1, the socket beside the HDMI port, where TinyNES also drives it; the speaker has its own pins and was unaffected. The Tang-Phosphor core `phosphortang.bin` was silent on the Pmod under the same declaration, and played on the Pmod once `0xc0` was set to `0x0500`. The old file was saved as `/tang.ini.bak-pmod0-i2s2` and `/tang.ini` now declares `pmod0 = none` and `pmod1 = i2s2`, so `tangload` sends `0xc0 = 0x0500`; after reloading the qualified image, `test.wav` played for 14 seconds with 689,838 samples at 48000 Hz and zero underruns, and the user reported PASS for both the Pmod I2S2 and the speaker. A new regression was observed: `test.wav` no longer ends by itself, running 3,923,977 samples over 1:21 until stopped, where entry 7 recorded 1,753,721 samples for the same file. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 10 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+Fix end-of-file handling so a track stops by itself and the resident player accepts the next track, then validate full-track completion on a representative subset of the corpus. Separately, decide whether to qualify the `HEAD` boot ROM rebuild on hardware or recover the source of the qualified ROM, so the deployed image is reproducible from git; until then the qualified image is `build/ae350_clk/sweep/seed-6` with SHA-256 `80150f8b14c36de3b3c3d1bd11baaaba8843fcf529629c1faed56e72bc492e9e`.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---
