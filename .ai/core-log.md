@@ -584,3 +584,32 @@ Qualify TinyTang's TinyDesk Phosphor app against TinyPhosphor end to end, includ
 - User Test: PASS
 
 ---
+## 15 COMMIT Unreleased 2026-10-20T22:32:34-07:00
+
+#### Coming From:
+
+Unreleased 8060b8d
+
+#### Purpose:
+
+Qualify TinyTang's TinyDesk Phosphor app as TinyPhosphor's player interface, with the XY scope enabled during playback.
+
+#### Outcome:
+
+No source changed in this cycle. The qualified seed 6 image `/root/cores/console138k/tinyphosphor_e8_known.bin` was loaded with `tangload`, which declared `0xc0 = 0x0500` from `/tang.ini`. The MCLK probe read `0x0012c000`, the AE350 state read `0x1b`, and the scope was enabled from the shell with `phosphor poke 0xac 1` because the app has no scope control; entry 14's streaming `/root/ae350/resident.tpi` was the player. The first attempt ended when the user power-cycled the board to disconnect the forgotten MAX98357A speaker; the core was reloaded and the prep repeated. With the speaker disconnected, the user browsed `/root/media/music` in the Phosphor window and exercised Play, Pause and Resume, Stop, Prev, Next, auto-advance on a short track, and a track ending with auto-advance off, then played `function.flac`; the user reported PASS on the Pmod I2S2 and HDMI with the scope drawing. Afterwards the scope reported 0 dropped samples and 43,928 sweeps, and the last track reported 0 underruns. The core's cumulative underrun register `0x6c`, which clears only with the core, read 5,597. Shell tests with the counter read between phases showed that it grows only when a track starts after a stop, by 1,768 to 2,843 sample periods (37 to 59 ms), and stays still during playback, pause, resume, back-to-back completed tracks and idle. TinyTang's `drain()` in `phosphor_player.cpp` unpauses the sink to flush it, and after a stop the empty sink counts every period of the flush as an underrun, before the new track's baseline is taken and before its first sample, so no audio is lost and per-track reports stay correct. The window's no-core hint still names `/root/cores/console138k/phosphortang.bin`. The required core-syntax audit re-read `.ai/core.md` and `.ai/core-syntax.md`, inspected the complete `.ai/` diff, confirmed `.ai/core.md` was unchanged, and validated this entry as number 15 of 100 with exactly six sections and allowed Status values.
+
+#### Next Steps:
+
+In TinyTang, consider a scope toggle in the Phosphor window, a no-core hint naming the TinyPhosphor image, and a `drain()` that skips the unpause when the sink is already empty, so `0x6c` stops counting the flush after a stop. On the next FPGA build cycle, resolve the boot ROM reproducibility gap from entry 10, add a speaker-only attenuation or volume register for the MAX98357A, and add the MAX98357A to `.ai/core-reference.md`. Album art remains unimplemented.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: N/A
+- Deployment: PASS
+- User Test: PASS
+
+---
