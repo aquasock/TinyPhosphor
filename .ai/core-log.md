@@ -872,3 +872,33 @@ Re-qualify against the shipping image rather than the diagnostic ones: the card'
 - User Test: PASS
 
 ---
+
+## 24 COMMIT Unreleased 2026-11-07T22:44:19-07:00
+
+#### Coming From:
+
+Unreleased c7d0824
+
+#### Purpose:
+
+Hand off the project with the Pmod audio defect closed, the card reduced to one image, and the remaining work ordered for the next agent.
+
+#### Outcome:
+
+The Pmod I2S2 plays real decoder audio and HDMI plays it at the same time, and the cause of the silence recorded in entries 21 and 22 was the build gate rather than the design. `tools/open/ae350_gates.py` had inherited TinyNES's rule that a bus clock reaching the row-0 taps through GB20 kills the A25, and applied it to this design without re-measuring; seed 13 of the authoring netlist failed that rule and played `test.mp3` to its end with 480002 samples and zero underruns while the user heard it on both outputs, seeds 21 and 34 failed it and booted the AE350 normally, and seed 28 passed it and was silent on the Pmod, so the rule was wrong in both directions and was rejecting about forty-seven of every forty-eight usable placements. Entry 23 removed it and the card now carries one image built by `SEED=1 tools/open/ae350_player.sh build/ship`, `tinyphosphor.bin` at 5047788 bytes and SHA-256 `f2233e6bb43d8e64d9bc3ada35cb0f1485d78a1db8e48243367ff136eb790cf2` with `tinyphosphor.fs.gz` at 1142374 bytes and SHA-256 `5a63a07868500a0937550765cc75d725f2ade985e221b49533f402689866a06e`, and the twelve diagnostic images this session had written to the card were deleted so exactly one `.bin` and one `.fs.gz` remain under that name; the standard `/root/scripts/tinyphosphor.tdsh` loads it and the board answered core 80 with `0xc0` reading `0x00000580`, `0x4000` reading `0x54504133`, `0x4020` reading `0x00000001` and `0xf8` reading `0x0012c000`, and a `test.mp3` run on it completed with 480002 samples at 48000 Hz and zero underruns. Three hypotheses were proposed, tested and retired this session and must not be re-litigated: the decoder is not at fault, because HDMI and the I2S2 take the same `play_pair` and HDMI played throughout; the CS4344 auto-mute is not at fault, because a tone held silent for three seconds while the clocks ran came back afterwards; and GB20 on `bus_clk` is not fatal here, for the hardware reasons above. Two measurement errors were also corrected: a constant PCM value is DC and cannot be heard, so the first constant build was never a valid test, and the first pin counters sampled `pmod1_io[0..3]` when `pmod_slot` maps lane k to `io[2k]` and so read the undriven ADC row. One limitation is recorded rather than hidden: the audio confirmation was heard on seed 13 of the authoring netlist, not on the shipping `f2233e6b` image, which has been verified to boot, run the AE350 and complete a track with zero underruns but has not been listened to on the Pmod. Both repositories are pushed and clean at this entry, TinyTang at `848a575` with firmware `2d6554c-dirty.e231569` running and `.ai/core-log.md` there at entry 32, and a local `.codewhale/handoff.md` records the same state for a fresh session to read.
+
+#### Next Steps:
+
+First confirm the shipping image on both outputs, since that is the one thing this cycle could not establish for itself, and if the Pmod is silent take another seed rather than reopening the RTL, because the gate no longer predicts which placements drive the lane. Then re-run the format sweep and the WAV underrun measurement from entry 21 on the shipping image, since every earlier figure came from a seed chosen by the rule that was removed. Three documentation items follow: the build section of `README.md` and `docs/open-flow-build.md` still describe the GB20 gate and a sweep that is no longer needed for placement, and this repository's `README.md` still documents the card file as `/tang.ini` with `pmod0` and `pmod1` keys, which the current TinyTang firmware refuses. Outside this repository, TinyTang's 0.2.1 card archive rebuild remains, and three stray twelve-megabyte ImageMagick files named `argparse`, `pathlib` and `re` sit untracked in that repository's root. The `nextpnr-mathieufro` fork carries an uncommitted `NPNR_GOWIN_CLK_LAST` change that no longer serves a purpose and should be reverted or committed deliberately.
+
+#### Files Modified:
+
+None.
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---
