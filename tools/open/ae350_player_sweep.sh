@@ -8,7 +8,7 @@
 #
 # The netlist is synthesised once (or reused when present); each seed gets its
 # own place-and-route directory.  Every seed is gated with the player and AE350
-# checks, including the GB10/GB20 bus-clock rule.  The best passing seed is
+# checks; GB20 is reported but not enforced.  The best passing seed is
 # packed; nothing is deployed.
 set -euo pipefail
 

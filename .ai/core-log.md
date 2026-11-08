@@ -841,3 +841,34 @@ Test the CS4344 auto-mute hypothesis with the cheap image rather than the AE350 
 - User Test: FAIL
 
 ---
+
+## 23 COMMIT Unreleased 2026-11-07T22:40:44-07:00
+
+#### Coming From:
+
+Unreleased 746e9eb
+
+#### Purpose:
+
+Stop the AE350 build gate rejecting usable placements, after hardware showed that its GB20 rule mispredicts in both directions on this design.
+
+#### Outcome:
+
+`tools/open/ae350_gates.py` no longer fails a placement whose `bus_clk` routing contains GB20; it reports the branch and passes. The rule came from TinyNES, where a bus clock reaching the row-0 taps through GB20 killed the A25, and it was inherited here as an absolute check without being re-measured. It does not hold on this design. Three placements of the same netlist that the gate rejected, seeds 13, 21 and 34 of the authoring pass, were packed and loaded on hardware and each booted: the core answered as 80, `0x4000` read `0x54504133`, `0x4020` read `0x00000001`, `0xf8` read `0x0012c000` and `0xfc` read `0x0000001f` on each, and seed 13 went further and played `test.mp3` to its end with `0:10, 480002 samples, 0 underruns` while the user heard it on both the Pmod I2S2 and HDMI. The gate had also been wrong in the other direction: `build/ae350_probe/sweep/seed-28` passed it and was silent on the Pmod, while seed 13 failed it and played on both outputs, so the check was selecting placements that were no better than the ones it discarded. The arithmetic of the cost is the reason this became its own cycle: with four global clock nets against four spine pairs `bus_clk` lands on GB20 in roughly forty-seven of forty-eight seeds, so the rule was rejecting about 98 percent of usable placements and spending a thirty-five-minute sweep to reach one arbitrary survivor. Four such sweeps ran in the previous cycle and the last three produced no winner at all. With the rule removed, `SEED=1 tools/open/ae350_player.sh build/ship` passes both gates at its first attempt and packs `build/ship/seed-1/tiny_phosphor_ae350_player.bin`, 5,047,788 bytes at SHA-256 `f2233e6bb43d8e64d9bc3ada35cb0f1485d78a1db8e48243367ff136eb790cf2`, and its `.fs` gzipped to 1,142,374 bytes at SHA-256 `5a63a07868500a0937550765cc75d725f2ade985e221b49533f402689866a06e`. That pair replaced `/root/cores/console138k/tinyphosphor.bin` and `tinyphosphor.fs.gz` on the card, the twelve diagnostic images this session had scattered there were deleted, and the card now carries exactly one `.bin` and one `.fs.gz` under that name; the standard `/root/scripts/tinyphosphor.tdsh` loads it, `0xc0` reads `0x00000580`, `0x4000` reads `0x54504133` and `0xf8` reads `0x0012c000`. The AE350's own clock taps still come from GB10 on every placement measured, passing or failing the old rule, which is why GB20 elsewhere on the net is harmless and why the boot banner rather than a netlist pattern is the real end-to-end check. A nextpnr fork change adding `NPNR_GOWIN_CLK_LAST` was built during the previous cycle and is left uncommitted in that fork, since it does not fix anything now that the rule is gone.
+
+#### Next Steps:
+
+Re-qualify against the shipping image rather than the diagnostic ones: the card's `tinyphosphor.bin` is now `f2233e6b…`, so the format sweep over `/root/media/music/diagnostics`, a full-size track and the WAV underrun question from entry 21 should all be re-read on it, since every earlier measurement was taken on an image whose placement was chosen by the gate this cycle removed. The README's build section should say that a single seed is normally enough and that the sweep is for timing failures, not for GB20, and `docs/open-flow-build.md` describes the gate list and needs the same correction. TinyPhosphor's own README still documents the card file as `/tang.ini` with `pmod0` and `pmod1` keys, which the current TinyTang firmware refuses, and that documentation fix remains outstanding.
+
+#### Files Modified:
+
+- tools/open/ae350_gates.py
+- tools/open/ae350_player_sweep.sh
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: PASS
+
+---
