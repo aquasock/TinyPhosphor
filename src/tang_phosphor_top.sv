@@ -8,7 +8,17 @@
 // CPU interface below carries the AE350's stream, play stream and debug view
 // across the hierarchy.
 
-module tang_phosphor_player (
+module tang_phosphor_player #(
+    // DIAGNOSTIC ONLY, default off.  With this set the I2S2 lane carries the
+    // bring-up tone generator instead of the player's PCM, which exercises
+    // the PMOD output path with no AE350 and no audio data involved.
+    parameter bit TONE_I2S2_DIAG = 1'b0,
+    // DIAGNOSTIC ONLY, default off.  Feeds i2s_playback a constant non-zero
+    // PCM pair instead of the decoder's, leaving the whole playback output
+    // stage in circuit.  Isolates "i2s_playback cannot emit" from "the data
+    // arriving at it is not what it expects".
+    parameter bit DIAG_CONST_PCM = 1'b0
+) (
     input        sys_clk,
 
     // PMOD sockets.  Driven by the display stack: what each socket does is a
@@ -440,7 +450,42 @@ audio_output_policy output_policy (
 );
 
 wire [7:0] i2s2_play_lane_o, i2s2_play_lane_oe;
+wire [31:0] i2s2_sdata_toggles, i2s2_sample_ticks;
+
+// DIAGNOSTIC: what the four DAC-row balls are actually doing.  pmod_slot
+// interleaves lanes onto pins as lane k -> io[2k], so the DAC row (lane 0
+// MCLK, 1 LRCK, 2 SCLK, 3 SDATA) is on io 0, 2, 4, 6 -- NOT io 0..3, which
+// would sample the undriven ADC row on the odd pins.
+logic [7:0] pmod1_io_q;
+logic [31:0] pin_toggles [4];
+integer lane_i;
+always_ff @(posedge clk_pixel) begin
+    if (!resetn) begin
+        pmod1_io_q <= 8'h00;
+        for (lane_i = 0; lane_i < 4; lane_i = lane_i + 1)
+            pin_toggles[lane_i] <= 32'd0;
+    end else begin
+        pmod1_io_q <= pmod1_io;
+        for (lane_i = 0; lane_i < 4; lane_i = lane_i + 1)
+            if (pmod1_io[2*lane_i] != pmod1_io_q[2*lane_i])
+                pin_toggles[lane_i] <= pin_toggles[lane_i] + 32'd1;
+    end
+end
 assign hdmi_audio_rate = i2s2_active_48k ? 32'd48_000 : 32'd44_100;
+
+// DIAGNOSTIC: an alternating PCM pair, not a constant one.  A constant value
+// is DC and cannot be heard, so the diagnostic has to produce a square wave
+// to prove the playback output stage reaches the DAC.
+logic [5:0] diag_phase;
+logic [15:0] diag_pcm;
+always_ff @(posedge clk_pixel) begin
+    if (!resetn)
+        diag_phase <= 6'd0;
+    else if (sample_tick)
+        diag_phase <= diag_phase + 6'd1;
+end
+assign diag_pcm = diag_phase[5] ? 16'h2000 : 16'hE000;
+
 i2s_playback audio_timebase (
     .clk_pixel(clk_pixel),
     .clk_mclk(clk_i2s2_mclk),
@@ -449,12 +494,14 @@ i2s_playback audio_timebase (
     .ready(i2s2_ready),
     .flush(player_stream_start || player_stream_cancel),
     .paused(pause_requested),
-    .pcm_valid(pcm_sample_valid),
-    .pcm_left(audio_source_word[0]), .pcm_right(audio_source_word[1]),
+    .pcm_valid(DIAG_CONST_PCM ? 1'b1 : pcm_sample_valid),
+    .pcm_left(DIAG_CONST_PCM ? diag_pcm : audio_source_word[0]),
+    .pcm_right(DIAG_CONST_PCM ? diag_pcm : audio_source_word[1]),
     .clk_audio(clk_audio), .sample_present(emitted_sample_present),
     .sample_tick(sample_tick),
     .hdmi_left(audio_sample_word[0]), .hdmi_right(audio_sample_word[1]),
-    .lane_o(i2s2_play_lane_o), .lane_oe(i2s2_play_lane_oe)
+    .lane_o(i2s2_play_lane_o), .lane_oe(i2s2_play_lane_oe),
+    .sdata_toggles(i2s2_sdata_toggles), .sample_ticks(i2s2_sample_ticks)
 );
 hdmi_audio_cadence hdmi_cadence (
     .clk_pixel(clk_pixel), .resetn(resetn),
@@ -485,7 +532,12 @@ pmod_mirror_core #(
     .EXPOSE_STATE   (1'b1),
     .RELEASE_PMOD0  (1'b0),
     .I2S2_BACKEND   (1'b1),
-    .I2S2_PLAYBACK  (1'b1)
+    .I2S2_PLAYBACK  (!TONE_I2S2_DIAG),
+    // DIAGNOSTIC BUILD TEST — leave at 1'b0.  The PMOD1 module is silent on
+    // hardware under every declared personality while TinyNES drives the same
+    // four pins from its own core, so a build with this set drives PMOD1's
+    // I2S2 lane regardless of what 0xc0 says.
+    .DIAG_I2S2_ON_PMOD1 (1'b0)
 ) display (
     .clk_pixel          (clk_pixel),
     .clk_pixel_x5       (clk_pixel_x5),
@@ -674,6 +726,14 @@ debug_regs debug_registers (
     .pcm_fifo_level(pcm_fifo_level),
     .samples_played(samples_played),
     .audio_underruns(audio_underruns),
+    .i2s_sdata_toggles(i2s2_sdata_toggles),
+    .i2s_sample_ticks(i2s2_sample_ticks),
+    .pin_mclk_toggles(pin_toggles[0]),
+    .pin_lrck_toggles(pin_toggles[1]),
+    .pin_sclk_toggles(pin_toggles[2]),
+    .pin_sdata_toggles(pin_toggles[3]),
+    .i2s_lane_o(i2s2_play_lane_o),
+    .i2s_lane_oe(i2s2_play_lane_oe),
     .audio_error(audio_error),
     .hdmi_audio_rate(hdmi_audio_rate),
     .detected_format(detected_format),

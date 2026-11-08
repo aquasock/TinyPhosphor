@@ -29,6 +29,21 @@ module debug_regs (
     input  [14:0] pcm_fifo_level,
     input  [31:0] samples_played,
     input  [31:0] audio_underruns,
+    // DIAGNOSTIC: pin-level audio truth, at 0x84 and 0x88.  Both were unused
+    // slots returning dead_beef, so nothing already reading this map moves.
+    input  [31:0] i2s_sdata_toggles,
+    input  [31:0] i2s_sample_ticks,
+    // DIAGNOSTIC: edge counts on the PMOD1 DAC-row balls themselves, sampled
+    // in the pixel domain.  0x84 MCLK, 0x88 LRCK, 0x94 SCLK, 0x98 SDATA.  All
+    // four addresses were unused slots returning dead_beef.
+    input  [31:0] pin_mclk_toggles,
+    input  [31:0] pin_lrck_toggles,
+    input  [31:0] pin_sclk_toggles,
+    input  [31:0] pin_sdata_toggles,
+    // The lane the I2S2 backend drives and its output enables, so a host can
+    // tell "not driving" from "driving and the pin is dead".
+    input  [7:0]  i2s_lane_o,
+    input  [7:0]  i2s_lane_oe,
     input   [7:0] audio_error,
     input  [31:0] hdmi_audio_rate,
     input   [2:0] detected_format,
@@ -217,6 +232,11 @@ always @(posedge clk) begin
     endcase
     case (read_index[4:0])
         5'd0: read_hi <= {8'b0, ui_window_start, ui_track_count, ui_current_track};
+        5'd1: read_hi <= pin_mclk_toggles;
+        5'd2: read_hi <= pin_lrck_toggles;
+        5'd5: read_hi <= pin_sclk_toggles;
+        5'd6: read_hi <= pin_sdata_toggles;
+        5'd15: read_hi <= {16'b0, i2s_lane_oe, i2s_lane_o};
         5'd3: read_hi <= elapsed_seconds;
         5'd4: read_hi <= duration_seconds;
         5'd7: read_hi <= boundary_count;

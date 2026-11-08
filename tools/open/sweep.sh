@@ -42,6 +42,7 @@ mkdir -p "$out"
 run_seed() {
     local seed=$1
     local dir=$out/seed-$seed
+    mkdir -p "$dir"
     "$root/tools/open/pnr.sh" "$out/synth/$top.json" "$dir" "$seed" \
         > "$dir/pnr.out" 2>&1 || { echo fail > "$dir/status"; return; }
     if "$py" "$root/tools/open/gates.py" \
@@ -53,7 +54,7 @@ run_seed() {
     fi
 }
 export -f run_seed
-export root out top
+export root out top py
 
 printf '%s\n' $seeds | xargs -P "$jobs" -I{} bash -c 'run_seed "$@"' _ {}
 

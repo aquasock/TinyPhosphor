@@ -89,7 +89,12 @@ module tiny_phosphor_ae350_player_top (
     wire [15:0] play_id;
     wire [31:0] play_rate;
 
-    tang_phosphor_player core (
+    tang_phosphor_player #(
+        // Real decoder audio, with the pin-level counters at 0x84/0x88 live.
+        // Set to 1'b0 to ship.
+        .TONE_I2S2_DIAG (1'b0),
+        .DIAG_CONST_PCM  (1'b0)
+    ) core (
         .sys_clk            (sys_clk),
         .pmod0_io           (pmod0_io),
         .pmod1_io           (pmod1_io),

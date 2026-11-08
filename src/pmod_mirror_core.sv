@@ -48,7 +48,12 @@ module pmod_mirror_core #(
     // socket's pins itself (tang_phosphor_top's AE350_JTAG_PMOD0).
     parameter bit   RELEASE_PMOD0     = 1'b0,
     parameter bit   I2S2_BACKEND       = 1'b0,
-    parameter bit   I2S2_PLAYBACK      = 1'b0
+    parameter bit   I2S2_PLAYBACK      = 1'b0,
+    // DIAGNOSTIC ONLY, default off.  Drives PMOD1 from the I2S2 lane without
+    // consulting the personality word, to separate "the declaration is not
+    // reaching the mux" from "the pins are not reaching the module".  Must
+    // not be left set: it ignores the socket contract entirely.
+    parameter bit   DIAG_I2S2_ON_PMOD1  = 1'b0
 ) (
     input  logic       clk_pixel,
     input  logic       clk_pixel_x5,
@@ -730,15 +735,28 @@ module pmod_mirror_core #(
             PERS_I2S2:    begin p0_lane_o = i2s2_lane_o; p0_lane_oe = i2s2_lane_oe; end
             default:      begin p0_lane_o = 8'h00;      p0_lane_oe = 8'h00;       end
         endcase
-
-        case (pmod1_personality)
-            PERS_OLEDRGB: begin p1_lane_o = oled_lane_o; p1_lane_oe = oled_lane_oe; end
-            PERS_VGA_J1:  begin p1_lane_o = vga_j1_o;   p1_lane_oe = vga_j1_oe;   end
-            PERS_VGA_J2:  begin p1_lane_o = vga_j2_o;   p1_lane_oe = vga_j2_oe;   end
-            PERS_I2S2:    begin p1_lane_o = i2s2_lane_o; p1_lane_oe = i2s2_lane_oe; end
-            default:      begin p1_lane_o = 8'h00;      p1_lane_oe = 8'h00;       end
-        endcase
     end
+
+    // The PMOD1 personality mux, unless this is the diagnostic build: that
+    // one drops the mux and the personality dependency entirely so PMOD1 is
+    // driven by the I2S2 lane whatever 0xc0 says.  Elaborating one branch or
+    // the other keeps the two assignments apart.
+    generate
+    if (DIAG_I2S2_ON_PMOD1) begin : g_diag_pmod1
+        assign p1_lane_o  = i2s2_play_lane_o;
+        assign p1_lane_oe = i2s2_play_lane_oe;
+    end else begin : g_mux_pmod1
+        always_comb begin
+            case (pmod1_personality)
+                PERS_OLEDRGB: begin p1_lane_o = oled_lane_o; p1_lane_oe = oled_lane_oe; end
+                PERS_VGA_J1:  begin p1_lane_o = vga_j1_o;   p1_lane_oe = vga_j1_oe;   end
+                PERS_VGA_J2:  begin p1_lane_o = vga_j2_o;   p1_lane_oe = vga_j2_oe;   end
+                PERS_I2S2:    begin p1_lane_o = i2s2_lane_o; p1_lane_oe = i2s2_lane_oe; end
+                default:      begin p1_lane_o = 8'h00;      p1_lane_oe = 8'h00;       end
+            endcase
+        end
+    end
+    endgenerate
 
     pmod_slot p0_slot (
         .flipped (pmod0_flipped),

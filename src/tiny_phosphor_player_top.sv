@@ -30,7 +30,12 @@ module tiny_phosphor_player_top (
     output [2:0] tmds_d_n
 );
 
-    tang_phosphor_player core (
+    tang_phosphor_player #(
+        // Diagnostics off: this top plays plainly.  TONE_I2S2_DIAG drives the
+        // I2S2 lane from the bring-up tone; DIAG_CONST_PCM replaces the PCM.
+        .TONE_I2S2_DIAG (1'b0),
+        .DIAG_CONST_PCM  (1'b0)
+    ) core (
         .sys_clk    (sys_clk),
         .pmod0_io   (pmod0_io),
         .pmod1_io   (pmod1_io),

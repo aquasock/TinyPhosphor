@@ -19,7 +19,12 @@ module i2s_playback (
     output logic clk_audio,
     output logic sample_present,
     output logic [15:0] hdmi_left, hdmi_right,
-    output logic [7:0] lane_o, lane_oe
+    output logic [7:0] lane_o, lane_oe,
+    // DIAGNOSTIC: the pin-level truth.  `sdata_toggles` counts edges on the
+    // serial data line and `sample_ticks` counts frame boundaries, so a host
+    // can tell a static line from a silent DAC.  Harmless when unread.
+    output logic [31:0] sdata_toggles,
+    output logic [31:0] sample_ticks
 );
     logic [1:0] audio_reset_sync = 0 /* synthesis syn_srlstyle = "registers" */;
     wire enable = resetn && running;
@@ -137,6 +142,23 @@ module i2s_playback (
         .sample_left(play_pair[15:0]), .sample_right(play_pair[31:16]),
         .sclk(sclk), .lrck(lrck), .sdata(sdata), .sample_tick(frame_tick)
     );
+
+    // Pin-level instrumentation: what the DAC is actually handed, not what the
+    // logic above believes it is handing over.
+    logic sdata_q;
+    always_ff @(posedge clk_mclk or negedge audio_resetn) begin
+        if (!audio_resetn) begin
+            sdata_q       <= 1'b0;
+            sdata_toggles <= 32'd0;
+            sample_ticks  <= 32'd0;
+        end else begin
+            sdata_q <= sdata;
+            if (sdata != sdata_q)
+                sdata_toggles <= sdata_toggles + 32'd1;
+            if (frame_tick)
+                sample_ticks <= sample_ticks + 32'd1;
+        end
+    end
     assign lane_o = {4'b0, sdata, sclk, lrck, clk_mclk && audio_resetn};
     // Only the DAC row is driven. The socket mux releases undeclared pins.
     assign lane_oe = resetn ? 8'h0f : 8'h00;

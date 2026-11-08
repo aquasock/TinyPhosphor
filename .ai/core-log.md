@@ -805,3 +805,39 @@ None.
 - User Test: PASS
 
 ---
+
+## 22 COMMIT Unreleased 2026-11-07T21:16:09-07:00
+
+#### Coming From:
+
+Unreleased d3b312d
+
+#### Purpose:
+
+Isolate where a decoded track stops reaching the Pmod I2S2 when the same track plays correctly on HDMI, separating the decoder, the playback output stage, the socket mux and the pins with hardware evidence rather than by inspecting the netlist again.
+
+#### Outcome:
+
+Four diagnostic builds were made and every one was loaded and heard by the user, and between them they narrowed the fault to the path between decoded PCM and the I2S serializer while retiring two hypotheses outright. `tang_phosphor_player` gained `TONE_I2S2_DIAG`, which drives the I2S2 lane from the 48 kHz bring-up tone generator instead of the player's PCM, and `DIAG_CONST_PCM`, which replaces the decoder's PCM with an alternating square wave; `i2s_playback` gained edge counters on the serial data line and on the frame boundary, exposed at 0x84 and 0x88 with a follow-up pair on the PMOD1 balls at 0x94 and 0x98 and a lane readback at 0xbc, `pmod_mirror_core` gained `DIAG_I2S2_ON_PMOD1`, and every one of these defaults to 0 so shipping behaviour is unchanged. The player-only image `build/tone_diag/seed-1` put a 1 kHz left and 2 kHz right tone on both Pmod channels and silence on HDMI, and `build/const_pcm2/seed-1` put an alternating square wave on both outputs, so the serialiser, the socket mux, the IOBUFs and the Pmod hardware all work; the same square wave with the AE350 present, `build/ae350_const/sweep/seed-40` at SHA-256 `16bbf244d1123b3a43158deb1d4e24ff5fab6daedf009c46e42f5e7b1ea9d8a5`, sounded on both outputs, so the AE350 top does not break the lane either. With real decoder audio, `build/ae350_probe/sweep/seed-28` at SHA-256 `9fa62b50f597fc560334d2ac185c5a6c12ddc8923b8a378c1f736dc195da2fff` played HDMI and was silent on the Pmod while `0x2c` read `0xbb80bb80` and `sdata` toggled about 1.2 million times a second, which places a valid, non-zero stream at the serialiser's input. TinyNES played Zelda with audio on both outputs from the same socket and PMOD1, which retires the hardware hypothesis, and the buzzing and silent builds place the four DAC-row IOBUFs on the same BELs with the same LUT truth tables, so the difference is not the pin logic. Three conclusions reached earlier in this session were wrong and are corrected here rather than left standing: a constant PCM value cannot prove audibility because it is DC, so the first constant build `build/const_pcm/seed-1` measured a healthy cadence and could never have made sound; a toggling `sdata` proves the serializer runs and not that a ball is driven; and the first pin counters sampled `pmod1_io[0..3]` when `pmod_slot` interleaves lane k onto `io[2k]`, so the odd bits were the undriven ADC row and their flat counts were an artefact of the instrument, now corrected to `2*lane_i`. GB20 placement was investigated in the same cycle and is not the audio fault, since seed 40 and seed 28 both passed the gate with no GB20 branch, but it is a real build tax: with four global clock nets against four spine pairs `bus_clk` lands on GB20 in roughly forty-seven seeds of forty-eight, so each AE350 rebuild costs about thirty-five minutes and a full forty-eight-seed sweep produced no winner on the last netlist tried; placing the unmodified e22 netlist at seeds 1, 2 and 3 gave 321, 430 and 539 GB20 hops against zero at seed 7, which proves the outcome is a placement draw rather than a property of the change. `tools/open/sweep.sh` also carried two silent defects that made the player-only sweep unable to pass any seed at all, a missing `mkdir -p` in `run_seed` and `$py` not exported into the xargs subshell, and both are fixed here. The user reported the Pmod silent on every image carrying real audio and accepted the tone and square-wave results on the diagnostic images, so the defect this cycle set out to locate remains open.
+
+#### Next Steps:
+
+Test the CS4344 auto-mute hypothesis with the cheap image rather than the AE350 one: the DAC mutes after 8192 consecutive zero LRCK cycles, and the buzzing build drives data from power-up while a decode build is silent until a track starts, so a player-only image whose tone generator holds silence for about three seconds after reset and then starts will show whether the DAC recovers, and that build passes every gate on all four seeds in under four minutes. If the tone never returns, the fix is to keep the data line non-zero through silence or to gate MCLK rather than the data. GB20 is deliberately kept out of that work because it costs rebuilds and not audio; fixing it properly means either reducing the global clock net count from four to three, with `core.clk_i2s2_ref` the newest and least loaded candidate, or teaching `route_clk_net` to reserve the two lowest spine pairs for a nominated net, and either is its own cycle. A nextpnr fork change that adds `NPNR_GOWIN_CLK_LAST` and refines the `NPNR_GOWIN_CLK_FIRST` log message was built and verified not to regress the known-good seed but does not fix GB20 and is deliberately left uncommitted.
+
+#### Files Modified:
+
+- src/audio/i2s_playback.sv
+- src/debug/debug_regs.sv
+- src/pmod_mirror_core.sv
+- src/tang_phosphor_top.sv
+- src/tiny_phosphor_ae350_player_top.sv
+- src/tiny_phosphor_player_top.sv
+- tools/open/sweep.sh
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: FAIL
+
+---
