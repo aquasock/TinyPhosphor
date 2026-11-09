@@ -71,6 +71,31 @@ the 32 MiB SDRAM memory map, and the on-demand input/output buffers at
 `0x41800000` and `0x41c00000`. The codec binaries are generated locally and
 are not committed.
 
+## libmpeg2 (MPEG-2 video decode probe)
+
+`software/mpeg2probe` compiles libmpeg2 from `third_party/rockbox`'s copy at
+`apps/plugins/mpegplayer/libmpeg2` -- mpeg2dec 0.4.0b, as imported there by
+Rockbox in 2006 -- unmodified, so that a 720x480 Main Profile stream can be
+timed on the AE350. The five decoder sources (`decode.c`, `header.c`, `idct.c`,
+`motion_comp.c`, `slice.c`) plus `motion_comp_c.c` are compiled directly from
+the submodule; nothing is copied into the tree.
+
+- Project: http://libmpeg2.sourceforge.net/ (GPL-2.0-or-later), carried by
+  Rockbox with its own GPL-2.0 notices intact.
+- `software/mpeg2probe/shim/` supplies the two headers Rockbox would have
+  supplied: `plugin.h` (the three host services the decoder uses, the section
+  attributes as no-ops, `DEBUGF` and `ARRAYLEN`) and `config.h` (no CPU_
+  selects, which is what selects the generic C IDCT and motion
+  compensation -- the paths this board would actually run).
+- `software/mpeg2probe/alloc.c` supplies libmpeg2's `mpeg2_malloc` /
+  `mpeg2_bufalloc` / `mpeg2_mem_reset` contract, and `bare/mem.c` the three C
+  library functions the bare-metal build has no newlib for.
+- Build and measurement tools are GPL-3.0: `tools/make_mpeg2_clip.sh`,
+  `tools/check_mpeg2_decoder.py`, `tools/mpeg2probe_report.py`.
+
+The probe is a measurement instrument, not a player: it decodes to libmpeg2's
+own buffers and never displays. It is not part of the shipped image.
+
 ## MiSTer-Phosphor design reference
 
 Tang-Phosphor's bounded audio profile, album-screen presentation and stereo

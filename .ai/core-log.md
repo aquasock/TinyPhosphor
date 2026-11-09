@@ -902,3 +902,46 @@ None.
 - User Test: PASS
 
 ---
+
+## 25 COMMIT Unreleased 2026-11-09T13:56:48-07:00
+
+#### Coming From:
+
+Unreleased 54a4b9e
+
+#### Purpose:
+
+Measure whether the 750 MHz AE350 can decode DVD-grade MPEG-2 in software, by timing libmpeg2 on a 720x480 Main Profile Main Level stream on hardware.
+
+#### Outcome:
+
+`software/mpeg2probe` compiles libmpeg2 from the Rockbox submodule unmodified for rv32imafdc, with `shim/` supplying the two headers Rockbox would have supplied and `alloc.c` the `mpeg2_mem_reset` dedicated/shared contract, and decodes a 720x480 29.97 fps 4 Mbit/s closed-GOP clip (150 pictures, 11 I, 40 P, 99 B) embedded in the image so the link is outside the measurement. Correctness was established before timing: on the host the decoded luma agrees with ffmpeg's reference decoder to a maximum absolute difference of 1 to 2 on 0.18 percent of samples on a busy clip and is bit-exact on the first frame of a static one, and on hardware the run returned luma FNV-1a checksums `0x59ee2e4c` and `0x7c5e122e` identical to the host build, so the board decodes what the reference does. `tools/check_mpeg2_decoder.py` holds that comparison, taking peak error rather than a hash because one least-significant-bit difference changes the hash of 345,600 samples, and a second build with `-funsigned-char` gave identical checksums, retiring the RISC-V char-signedness risk. Two defects were found and fixed in the probe during the cycle: frames were first counted at the display buffer, which loses a third of them because three buffers rotate through B pictures and consecutive displays reuse one, so counting moved to the picture header and checksums to every display; and the first version hashed only when the buffer identity changed, which made the last frame the wrong one. The measurement is 4,371,324,817 core cycles and 974,414,256 retired instructions for 150 frames, which the two independent clocks agree on to 749.9 MHz (the 75 MHz fabric timer read 437,183,956 ticks), giving 84.32 cycles per pixel, 18.80 instructions per pixel, IPC 0.223, 38.86 ms per frame and 25.74 fps decode-only against the 33.37 ms budget, or 1.16 times over. A second run moved cycles by 2.5 percent with instructions bit-identical. A 352x240 clip measured 90.59 cycles per pixel and 0.229 IPC, which on its own would look like evidence against a memory explanation but is not, because motion-compensation traffic per pixel is constant with frame size; the decomposition instead used three independently measured constants and no fitted parameters -- 570 cycles per miss, 0.95 IPC from the dependent-chain probe, and 33 cache lines per macroblock from geometry -- and reproduced the two runs within +10.6 and +5.2 percent, putting 23.5 percent of the time in compute and 87.1 percent in non-overlapping misses, so the decode is memory-stall bound and an L2 at 240 cycles per hit would give 42.8 fps. The AE350's DDR3-bridge counters at `0xe80000a0` read zero in this SDRAM variant, so the attribution is modelled rather than counted and that register block does not exist here. Deployment used `phosphor run` through TinyTang after `ae350run` proved to be a TinyNES path that this core does not answer, and the result was read with `phosphor peek`; the program returned 0 and the boot ROM returned to its wait state. The user did not run a visual test because the probe has no output; the hardware evidence is the checksums and the counters.
+
+#### Next Steps:
+
+The measured 25.7 fps decode-only is below DVD real time before any scanout or audio shares the same memory, so software decoding at 720x480 is not viable as it stands and the 128 KiB fabric L2 from Tang-PSX is the first lever, worth a modelled 42.8 fps, followed by RISC-V IDCT and motion-compensation kernels; if neither closes the gap the fabric H.262 decoder takes the decode off the CPU entirely. Whether a 2.5 to 3 Mbit/s 720x480 encode is what the user means by DVD quality remains the open question that would change the target.
+
+#### Files Modified:
+
+- software/mpeg2probe/Makefile
+- software/mpeg2probe/alloc.c
+- software/mpeg2probe/bare/mem.c
+- software/mpeg2probe/main_ae350.c
+- software/mpeg2probe/main_host.c
+- software/mpeg2probe/probe.c
+- software/mpeg2probe/probe.h
+- software/mpeg2probe/shim/config.h
+- software/mpeg2probe/shim/plugin.h
+- tools/make_mpeg2_clip.sh
+- tools/check_mpeg2_decoder.py
+- tools/mpeg2probe_report.py
+- THIRD_PARTY.md
+- .ai/core-log.md
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: N/A
+
+---
