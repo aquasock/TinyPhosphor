@@ -91,7 +91,17 @@ $(BUILD)/ae/crt0.o: $(ROOT)/firmware/ae350/lib/crt0.S
 
 # The clip is embedded through .incbin rather than -D so no compiler can
 # decide to move or reorder it.
-$(BUILD)/ae/input.S: $(CLIP)
+#
+# The stamp records which clip the .S was built from.  Without it, pointing
+# CLIP at a different file whose timestamp is older than the .S leaves the
+# previous clip embedded and the image builds happily with the wrong input --
+# which happened once and would have been a wasted hardware run.
+$(BUILD)/ae/input.stamp: FORCE
+	@mkdir -p $(dir $@)
+	@printf '%s\n' "$(abspath $(CLIP))" | cmp -s - $@ || \
+		printf '%s\n' "$(abspath $(CLIP))" > $@
+
+$(BUILD)/ae/input.S: $(CLIP) $(BUILD)/ae/input.stamp
 	@mkdir -p $(dir $@)
 	@printf '%s\n' \
 		'	.section .rodata.input, "a"' \
@@ -125,5 +135,7 @@ ae350: $(BUILD)/$(NAME).tpi
 
 clean:
 	rm -rf $(BUILD)
+
+FORCE:
 
 .PHONY: host ae350 clean

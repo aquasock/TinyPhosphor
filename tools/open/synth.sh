@@ -70,7 +70,7 @@ echo "blackboxing $(echo "$bb" | wc -l) of $(echo "$libmods" | wc -l) library mo
 
 mapfile -t sources < "$src_list"
 {
-    printf '%s\n' "read_slang --std 1800-2017 -U SYNTHESIS -D GW_IDE \\"
+    printf '%s\n' "read_slang --std 1800-2017 -U SYNTHESIS -D GW_IDE ${EXTRA_DEFINES:-} \\"
     printf '%s\n' "    --allow-use-before-declare --allow-lib-module-redef \\"
     printf '%s\n' "    $bbflags \\"
     printf '%s\n' "    -v $shim/cells_sim_nospecify.v \\"
@@ -82,6 +82,9 @@ mapfile -t sources < "$src_list"
         printf '    %q \\\n' "$root/$f"
     done
     printf '\n'
+    # EXTRA_DEFINES reaches read_slang's -D.  -DAE350_L2_OFF builds the
+    # AE350 image without its second-level cache, which is the baseline the
+    # cached image is measured against.
     printf 'synth_gowin -top %s -family %s\n' "$top" "$family"
     printf 'write_json %s/%s.json\n' "$out" "$top"
     printf 'stat\n'

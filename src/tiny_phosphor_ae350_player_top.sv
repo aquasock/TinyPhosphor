@@ -139,6 +139,25 @@ module tiny_phosphor_ae350_player_top (
         .cpu_play_ready     (play_ready)
     );
 
+    // Lines in the AE350's second-level cache, 32 bytes each: 2048 is 64 KiB.
+    //
+    // OFF BY DEFAULT, deliberately.  Measured on hardware 2026-11-09 the
+    // cache as built is a 33.8 percent pessimization of the MPEG-2 decode:
+    // 5,851,293,437 cycles against the baseline's 4,371,786,929, with a 75.3
+    // percent hit rate and bit-identical output.  It is not a logic fault --
+    // the tests and the decode checksums say the data is right -- it is the
+    // wrong place to put a cache.  ahb_sdram already holds one 32-byte line
+    // and serves the other three doublewords of a fill from it, so most of
+    // the reuse this cache catches was already free, while its own hit path
+    // costs about five bus cycles and its fill issues four separate SDRAM
+    // requests.  See src/ae350/ae350_l2_cache.sv and core-log entry 26.
+    // Enable with -DAE350_L2_ON only to reproduce that measurement.
+`ifdef AE350_L2_ON
+    localparam integer L2_LINES = 2048;
+`else
+    localparam integer L2_LINES = 0;
+`endif
+
     // ------------------------------------------------------------------
     // Board-clock power-on reset (about 1.3 ms).
     // ------------------------------------------------------------------
@@ -400,9 +419,15 @@ module tiny_phosphor_ae350_player_top (
         .hready (rom_hready)
     );
 
-    // Memory-side diagnostics are zero: this image has no RAM bridge.
-    logic [31:0] bridge_reads = 0, bridge_writes = 0, bridge_latency_sum = 0;
-    logic [31:0] bridge_latency_max = 0, bridge_buffer_hits = 0, bridge_errors = 0;
+    // This image has no DDR3 RAM bridge, so the register block's memory
+    // counters at 0xa0..0xb4 report the second-level cache instead:
+    //   0xa0 accesses, 0xa4 writes, 0xa8 misses, 0xb0 hits.
+    // A read miss is the expensive event, so hits plus misses is the access
+    // count and their ratio is the hit rate.  This is what makes the cache's
+    // effect readable on hardware rather than only inferred from the decode
+    // time.
+    logic [31:0] bridge_reads, bridge_writes, bridge_latency_sum;
+    logic [31:0] bridge_latency_max, bridge_buffer_hits, bridge_errors;
     logic [31:0] bridge_trace_addr [16];
     logic [15:0] bridge_trace_info [16];
     logic [7:0]  bridge_trace_status = 0;
@@ -452,16 +477,70 @@ module tiny_phosphor_ae350_player_top (
         .sd_rdata (sd_rdata)
     );
 
+    // The second-level cache.  ahb_ram's request port is unchanged; what
+    // used to be the SDRAM engine's own port becomes the cache's upstream
+    // side, and the engine is driven from the cache instead.  With
+    // L2_LINES = 0 the two are wired together as they always were.
+    logic        sd2_req, sd2_write;
+    logic [24:3] sd2_addr;
+    logic [7:0]  sd2_lanes;
+    logic [63:0] sd2_wdata, sd2_rdata;
+    logic        sd2_ack;
+
+    genvar gi;
+    generate
+        if (L2_LINES > 0) begin : l2
+            ae350_l2_cache #(.LINES(L2_LINES)) cache (
+                .clk          (bus_clk),
+                .resetn       (mem_resetn),
+                .up_req       (sd_req),
+                .up_write     (sd_write),
+                .up_addr      (sd_addr),
+                .up_lanes     (sd_lanes),
+                .up_wdata     (sd_wdata),
+                .up_ack       (sd_ack),
+                .up_rdata     (sd_rdata),
+                .dn_req       (sd2_req),
+                .dn_write     (sd2_write),
+                .dn_addr      (sd2_addr),
+                .dn_lanes     (sd2_lanes),
+                .dn_wdata     (sd2_wdata),
+                .dn_ack       (sd2_ack),
+                .dn_rdata     (sd2_rdata),
+                .stat_lookups (bridge_reads),
+                .stat_hits    (bridge_buffer_hits),
+                .stat_misses  (bridge_latency_sum),
+                .stat_writes  (bridge_writes)
+            );
+            assign bridge_errors    = 32'd0;
+            assign bridge_latency_max = 32'd0;
+        end else begin : no_l2
+            assign sd2_req   = sd_req;
+            assign sd2_write = sd_write;
+            assign sd2_addr  = sd_addr;
+            assign sd2_lanes = sd_lanes;
+            assign sd2_wdata = sd_wdata;
+            assign sd_ack    = sd2_ack;
+            assign sd_rdata  = sd2_rdata;
+            assign bridge_reads       = 32'd0;
+            assign bridge_writes      = 32'd0;
+            assign bridge_latency_sum = 32'd0;
+            assign bridge_buffer_hits = 32'd0;
+            assign bridge_errors      = 32'd0;
+            assign bridge_latency_max = 32'd0;
+        end
+    endgenerate
+
     ahb_sdram sdram (
         .clk         (bus_clk),
         .resetn      (mem_resetn),
-        .req         (sd_req),
-        .write       (sd_write),
-        .addr        (sd_addr),
-        .lanes       (sd_lanes),
-        .wdata       (sd_wdata),
-        .ack         (sd_ack),
-        .rdata       (sd_rdata),
+        .req         (sd2_req),
+        .write       (sd2_write),
+        .addr        (sd2_addr),
+        .lanes       (sd2_lanes),
+        .wdata       (sd2_wdata),
+        .ack         (sd2_ack),
+        .rdata       (sd2_rdata),
         .ready       (sdram_ready),
         .vstart      (1'b0),
         .vaddr       (17'd0),

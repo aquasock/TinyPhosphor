@@ -1,5 +1,6 @@
 src/ae350/ae350_boot_rom.sv
 src/ae350/ae350_exts_regs.sv
+src/ae350/ae350_l2_cache.sv
 src/ae350/ae350_play_stream.sv
 src/ae350/ae350_pll.v
 src/ae350/ae350_stream_loader.sv

@@ -96,6 +96,23 @@ the submodule; nothing is copied into the tree.
 The probe is a measurement instrument, not a player: it decodes to libmpeg2's
 own buffers and never displays. It is not part of the shipped image.
 
+## Second-level cache design reference (Tang-PSX)
+
+`src/ae350/ae350_l2_cache.sv` is original code written for this project, not
+imported or translated. Its design was informed by Tang-PSX's
+`gateware/l2_cache.py`, a LiteX/Migen write-through L2 for the same AE350 on
+the Gowin DDR3 controller; the ideas taken are the shape of the thing -- a
+direct-mapped line cache in block RAM on the AE350's own memory port, write-
+through with the downstream memory authoritative, and a statistical readout
+-- and the hardware-observed miss costs that make it worth building
+(AE350-009, AE350-010). Tang-PSX is GPL-3.0-only, the same licence as this
+HDL, so the reference raises no licensing question either way.
+
+It is not a port: Tang-PSX's cache sits on a 256-bit LiteX native port and
+this one sits on the 64-bit `sd_*` port that `ahb_ram` drives, the tag and
+data geometry differs, and the write policy here invalidates rather than
+merging, so no line of that file is reproduced.
+
 ## MiSTer-Phosphor design reference
 
 Tang-Phosphor's bounded audio profile, album-screen presentation and stereo

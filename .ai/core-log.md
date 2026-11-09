@@ -945,3 +945,42 @@ The measured 25.7 fps decode-only is below DVD real time before any scanout or a
 - User Test: N/A
 
 ---
+
+## 26 COMMIT Unreleased 2026-11-09T14:32:00-07:00
+
+#### Coming From:
+
+Unreleased 05e52c8
+
+#### Purpose:
+
+Build the AE350 second-level cache that entry 25's decomposition called for, in the open flow, and measure whether it recovers the MPEG-2 decode.
+
+#### Outcome:
+
+`src/ae350/ae350_l2_cache.sv` is a 64 KiB direct-mapped write-through cache, 2048 lines of 32 bytes, inserted between `ahb_ram` and `ahb_sdram` on the existing 64-bit `sd_*` port, with every array single-clock and its tags invalidated by walking the index space after reset rather than by bitstream initialisation. It counts lookups, hits, misses and writes into the register block's unused RAM-bridge addresses at 0xa0, 0xa8, 0xb0 and 0xa4, so the hit rate is readable on hardware. The build is open-flow only: synthesis with yosys `read_slang`, place and route with the nextpnr-himbaechel fork, packing with apicula `gowin_pack`, no Gowin EDA in the path; seed 1 passed both gate suites with `bus_clk` at 117.261 MHz against 75, the dedicated `AE350_SOC_CORE_CLK` hop present and no hold violations, at 246 of 340 BSRAM and 23,164 of 138,240 LUT4, so the cache costs 34 block RAMs and 889 LUT4. `sim/tb_l2_cache.sv` and `tools/test_l2_cache.sh` test it at 16 and 2048 lines against a model memory rather than a hit counter, and they found two real faults before hardware: `line_base` built a 23-bit value in a 22-bit return, which truncated the top address bit so every fill landed one line high, and the array read address was registered, so the tag was compared against the previous request's index and returned false hits whenever two lines sharing an index shared a tag value. The testbench initially missed the first fault because its memory pattern repeated every 256 addresses; that pattern now depends on the high address bits. On hardware the cache is a **33.8 percent pessimization**: 5,851,293,437 cycles against a same-tree 4,371,786,929-cycle baseline, 19.23 fps against 25.73, with a 75.3 percent hit rate (21,553,813 hits, 7,052,046 misses, 28,605,860 lookups) and bit-identical decoded luma, so the data is right and the placement is wrong. The baseline was rebuilt from the same tree and toolchain with `-DAE350_L2_OFF` to make the comparison one difference, and it reproduced the previously shipped image's 4.371G to 0.0002 percent. The cause is that `ahb_sdram` already holds one 32-byte line and serves that line's other three doublewords from it, so a baseline access averages 11.7 bus cycles and only a few percent reach the SDRAM at all; most of what the cache counts as a hit was already nearly free, while each of its hits costs about five bus cycles of its own and each of its misses issues four separate downstream requests, measured at about 53 bus cycles each. The cache is therefore opt-in behind `-DAE350_L2_ON` and its default path is the proven baseline, with the measurement recorded in the module header and the top so it cannot be re-litigated or shipped by accident. The MPEG-2 download and the A/B runs needed `phosphor run` twice with a core reload between them, and the shipped `pcm`-era probe labels at USER(10..12) were found to be stale, so the probe now prints the memory counters as lookups/misses/hits at USER(13..15). The user did not run a visual test; the evidence is the cycle counts, the counters and the checksums.
+
+#### Next Steps:
+
+Stop and get approval before continuing, because the result changes the plan rather than extending it: the cache should live inside `ahb_sdram` as a widened version of the line buffer it already has, where a hit keeps its one-or-two-cycle path and a fill is a single burst, instead of in front of it. That is the change that can convert the few percent of accesses that still reach SDRAM into fast hits, which is worth up to 2.8 billion of the baseline's 3.35 billion memory cycles; the alternative is to accept 25.7 fps and move to the fabric decoder.
+
+#### Files Modified:
+
+- src/ae350/ae350_l2_cache.sv
+- src/tiny_phosphor_ae350_player_top.sv
+- sim/tb_l2_cache.sv
+- tools/test_l2_cache.sh
+- tools/open/synth.sh
+- tools/open/ae350_player_sources.f
+- software/mpeg2probe/main_ae350.c
+- software/mpeg2probe/Makefile
+- THIRD_PARTY.md
+- .ai/core-log.md
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: N/A
+
+---

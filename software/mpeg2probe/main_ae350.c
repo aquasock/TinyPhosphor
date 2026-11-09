@@ -110,11 +110,16 @@ int main(void)
 	put_hex(r.crc_first);
 	ae350_puts(" last=");
 	put_hex(r.crc_last);
-	ae350_puts("\r\nbridge reads=");
+	/* In an image without the DDR3 RAM bridge these same registers carry
+	 * the second-level cache's counters, so the same three numbers mean
+	 * lookups, misses and hits.  Both readings are printed rather than
+	 * guessed at: the baseline image answers zero here, the cached one
+	 * answers with the decode's access counts. */
+	ae350_puts("\r\nmem lookups/misses/hits=");
 	ae350_put_decimal(reads);
-	ae350_puts(" lat_sum=");
+	ae350_putc('/');
 	ae350_put_decimal(lat_sum);
-	ae350_puts(" hits=");
+	ae350_putc('/');
 	ae350_put_decimal(hits);
 	ae350_puts(" errors=");
 	ae350_put_decimal(errors);
