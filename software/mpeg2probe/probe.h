@@ -35,6 +35,12 @@ struct probe_result {
 
 	/* Heap high-water mark, to report the decoder's footprint. */
 	uint32_t arena_peak;
+
+	/* Scanout emulation: bytes read back out of the decoded frames the way
+	 * a display scanout reads them, and a checksum so the reads are not
+	 * optimised away.  Equal to the plane sizes when emulation is on. */
+	uint32_t scan_bytes;
+	uint32_t scan_sum;
 };
 
 /*
@@ -57,6 +63,21 @@ struct probe_dump {
  */
 int probe_run(const uint8_t *data, uint32_t len, struct probe_result *out,
               struct probe_dump *dump);
+
+/*
+ * probe_run with the display's share of the memory bus included.
+ *
+ * A real player does not stop at "decode finished": the display reads the
+ * finished frame back out of the same SDRAM, once per refresh, while the
+ * decoder is working on the next one.  Setting scanout makes this probe walk
+ * each displayed frame's three planes the way a raster scanout would, in
+ * order, so the cycle count covers both users of the memory.  It is not a
+ * scanout -- nothing is displayed and the reads are a burst per frame rather
+ * than a row per line -- but it puts the right number of bytes through the
+ * same controller, which is what the timing question needs.
+ */
+int probe_run_scanout(const uint8_t *data, uint32_t len,
+                      struct probe_result *out);
 
 /* Bytes of the decoder arena handed out, for the footprint report. */
 struct probe_mem {

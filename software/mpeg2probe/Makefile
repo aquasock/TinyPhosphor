@@ -30,6 +30,12 @@ XOBJCOPY  ?= $(CROSS)objcopy
 CLIP      ?= $(BUILD)/clip.m2v
 NAME      ?= mpeg2probe
 
+# SCANOUT=1 adds the display's share of the memory bus to the measurement:
+# each displayed frame's three planes are read back out of SDRAM the way a
+# raster scanout reads them.  Same decoder, same stream, one more user of the
+# controller, which is the number a player needs.
+SCANOUT   ?= 0
+
 # -O2, the level Rockbox builds its faster codecs at.  -Os would be the
 # conservative choice and is one flag away.
 OPT       := -O2
@@ -75,7 +81,8 @@ AE_OBJ := $(addprefix $(BUILD)/ae/,$(addsuffix .o,$(LIB_BASE) $(PROBE_BASE) main
 
 $(BUILD)/ae/%.o: $(HERE)/%.c
 	@mkdir -p $(dir $@)
-	$(XCC) $(ARCHFLAGS) $(COMMON) -I$(ROOT)/firmware/ae350/include -c $< -o $@
+	$(XCC) $(ARCHFLAGS) $(COMMON) $(AE_DEFINES) \
+		-I$(ROOT)/firmware/ae350/include -c $< -o $@
 
 $(BUILD)/ae/%.o: $(LIBMPEG2)/%.c
 	@mkdir -p $(dir $@)
@@ -130,6 +137,11 @@ $(BUILD)/$(NAME).bin: $(BUILD)/$(NAME).elf
 $(BUILD)/$(NAME).tpi: $(BUILD)/$(NAME).bin
 	python3 $(ROOT)/tools/ae350_run.py pack $< -o $@
 	@echo "built $@"
+
+# SCANOUT reaches the C sources as PROBE_SCANOUT.  It is a separate define
+# rather than a variable because the host build has no use for it, and the
+# artifact name changes so a scanout image cannot be mistaken for a plain one.
+AE_DEFINES := $(if $(filter 1,$(SCANOUT)),-DPROBE_SCANOUT,)
 
 ae350: $(BUILD)/$(NAME).tpi
 

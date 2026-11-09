@@ -31,8 +31,23 @@ static uint32_t fnv1a(const uint8_t *p, uint32_t n)
 	return h;
 }
 
-int probe_run(const uint8_t *data, uint32_t len, struct probe_result *out,
-              struct probe_dump *dump)
+/*
+ * Read a whole plane the way a raster scanout would, and fold it into a
+ * checksum so nothing is optimised out.  Word reads, in ascending order,
+ * which is what a line-oriented display read looks like to the controller.
+ */
+static uint32_t scan_plane(const uint8_t *plane, uint32_t bytes, uint32_t sum)
+{
+	const uint32_t *p = (const uint32_t *)(const void *)plane;
+	uint32_t words = bytes / 4;
+
+	for (uint32_t i = 0; i < words; i++)
+		sum = (sum << 1 | sum >> 31) ^ p[i];
+	return sum;
+}
+
+static int run(const uint8_t *data, uint32_t len, struct probe_result *out,
+               struct probe_dump *dump, int scanout)
 {
 	const mpeg2_info_t *info;
 	mpeg2dec_t *dec;
@@ -122,6 +137,28 @@ int probe_run(const uint8_t *data, uint32_t len, struct probe_result *out,
 					       info->display_fbuf->buf[0], n);
 			}
 			out->displayed++;
+
+			/*
+			 * The display's share: three planes of the frame that
+			 * was just completed, read back out of SDRAM while the
+			 * decoder moves on to the next picture.
+			 */
+			if (scanout && info->display_fbuf) {
+				uint32_t luma = out->stride * out->height;
+				uint32_t chroma = (out->stride / 2) * (out->height / 2);
+				const uint8_t *y = info->display_fbuf->buf[0];
+
+				out->scan_sum = scan_plane(y, luma, out->scan_sum);
+				if (info->display_fbuf->buf[1])
+					out->scan_sum = scan_plane(
+						info->display_fbuf->buf[1], chroma,
+						out->scan_sum);
+				if (info->display_fbuf->buf[2])
+					out->scan_sum = scan_plane(
+						info->display_fbuf->buf[2], chroma,
+						out->scan_sum);
+				out->scan_bytes += luma + 2 * chroma;
+			}
 			break;
 
 		case STATE_BUFFER:
@@ -151,6 +188,18 @@ done:
 	mpeg2_close(dec);
 
 	return out->frames ? 0 : -1;
+}
+
+int probe_run(const uint8_t *data, uint32_t len, struct probe_result *out,
+              struct probe_dump *dump)
+{
+	return run(data, len, out, dump, 0);
+}
+
+int probe_run_scanout(const uint8_t *data, uint32_t len,
+                      struct probe_result *out)
+{
+	return run(data, len, out, NULL, 1);
 }
 
 void probe_mem(struct probe_mem *m)

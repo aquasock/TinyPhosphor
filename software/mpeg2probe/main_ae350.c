@@ -51,7 +51,11 @@ int main(void)
 	instructions = ae350_instructions();
 	ticks        = ae350_time();
 
+#ifdef PROBE_SCANOUT
+	status = probe_run_scanout(input_data, bytes, &r);
+#else
 	status = probe_run(input_data, bytes, &r, NULL);
+#endif
 
 	ticks        = ae350_time() - ticks;
 	instructions = ae350_instructions() - instructions;
@@ -123,6 +127,10 @@ int main(void)
 	ae350_put_decimal(hits);
 	ae350_puts(" errors=");
 	ae350_put_decimal(errors);
+	ae350_puts("\r\nscan_bytes=");
+	ae350_put_decimal(r.scan_bytes);
+	ae350_puts(" scan_sum=");
+	put_hex(r.scan_sum);
 	ae350_puts("\r\n");
 
 	return (uint32_t)status;

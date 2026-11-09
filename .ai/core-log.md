@@ -984,3 +984,38 @@ Stop and get approval before continuing, because the result changes the plan rat
 - User Test: N/A
 
 ---
+
+## 27 COMMIT Unreleased 2026-11-09T15:20:00-07:00
+
+#### Coming From:
+
+Unreleased e50d532
+
+#### Purpose:
+
+Measure what the 25.7 fps decode becomes when a display is reading the same memory, and settle which raster a player should target.
+
+#### Outcome:
+
+`software/mpeg2probe` gained a `SCANOUT=1` build in which `probe_run_scanout` reads each displayed frame's three planes back out of SDRAM in ascending word order -- the traffic a raster scanout generates -- while the decoder works on the next picture, so one cycle count covers both users of the controller. The decode is unchanged: the host test reports identical picture counts and luma checksums with and without the read-back, 76,723,200 bytes read for 148 displayed frames at 720x480, and the hardware run returned the same `0x59ee2e4c`/`0x7c5e122e` checksums. On the same-tree baseline image (`tinyphosphor_nol2.bin`, entry 26) the plain decode measured 4,373,063,857 cycles and the scanout build 5,260,732,128, so the display's share costs **20.3 percent**, 84.36 cycles per pixel becoming 101.48, or 25.73 fps becoming 21.38. Of the 887.7 million added cycles, 134.3 million are the read loop's own instructions -- 7.00 per word, 16 percent of the delta at the measured IPC -- and the rest is memory stall: the concurrent stream moved 64.8 MB/s against the controller's 150 MB/s peak. Two limits on that number are recorded rather than smoothed over. The emulation reads each displayed frame once, 10.9 MB/s, while a real 720p60 scanout re-reads the frame every refresh at 31.1 MB/s, 2.8 times more; scaling the stall portion by byte volume gives about 17 fps at 720x480, an extrapolation within roughly 20 percent and not a measurement. And the read loop is software whereas a real scanout is fabric with priority over the CPU, which could cut either way. Because per-pixel cost is near-flat across sizes -- 84.3 cycles/px at 720x480 against 90.6 at 352x240, measured earlier -- the measured price predicts the frame rate at any geometry: 720x480 21.4 fps, 720x576 17.8, 640x480 24.1, 640x368 31.4, 640x360 32.1, 576x324 39.6, 480x272 56.6. The 30 fps line therefore sits at about 235,000 pixels, which makes 640x360 the largest raster that holds 30 fps once a display shares the memory, and 720x480 and 720x576 are not finishable at DVD's rate before any allowance for demux or audio. `tools/mpeg2probe_report.py` prints that table from any run and its stale "what an L2 at 240 cycles would buy" projection was removed, because entry 26 measured a cache and found it slower. The Tang dropped out of two-wire mode mid-cycle and had to be reconnected and the baseline reloaded; nothing was lost. The user did not run a visual test; there is no display yet, and the evidence is the cycle counts, the instruction counts, the identical checksums and the byte volume.
+
+#### Next Steps:
+
+Build for 640x360 at 30 fps and treat the scanout as the one remaining unknown: it needs a dual-clock line store because `ahb_sdram` runs on `bus_clk` for the AE350 and the open flow rejects a two-clock block RAM, so the crossing must be done in fabric without one. Codec kernels stay low priority, since compute is 22 percent of the measured time.
+
+#### Files Modified:
+
+- software/mpeg2probe/probe.h
+- software/mpeg2probe/probe.c
+- software/mpeg2probe/main_ae350.c
+- software/mpeg2probe/Makefile
+- tools/mpeg2probe_report.py
+- .ai/core-log.md
+
+#### Status:
+
+- Build: PASS
+- Deployment: PASS
+- User Test: N/A
+
+---

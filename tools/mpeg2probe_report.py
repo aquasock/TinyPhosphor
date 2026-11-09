@@ -81,15 +81,29 @@ def main():
     model = compute + stalls
     print(f"macroblock/frame    {mbs}")
     print(f"compute term        {compute:>16,.0f}  ({compute / args.cycles * 100:4.1f}% of measured)")
-    print(f"stall term          {stalls:>16,.0f}  ({stalls / args.cycles * 100:4.1f}% of measured)")
+    print(f"memory term         {stalls:>16,.0f}  ({stalls / args.cycles * 100:4.1f}% of measured)")
     print(f"model total         {model:>16,.0f}  ({(model - args.cycles) / args.cycles * 100:+.1f}% vs measured)")
+    print("  the model's 570-cycle miss is the SDRAM path as built, most of it")
+    print("  the controller rather than the DRAM; it is a bound, not a target.")
     print()
-    print("decode-only if the memory term dropped to an L2 hit (240 cycles):")
-    for label, miss in (("no L2, 570 cycles", 570.0),
-                        ("L2 hit, 240 cycles", 240.0)):
-        tot = compute + mbs * n * LINES_PER_MB * miss
-        print(f"  {label:20s} {tot / CORE_HZ / n * 1e3:6.2f} ms/frame  "
-              f"{n / (tot / CORE_HZ):6.1f} fps")
+    print("predicted frame rate by raster at this measured cycles/pixel")
+    print("(per-pixel cost is near-flat across sizes: 84.3 at 720x480, 90.6 at 352x240)")
+    for rw, rh, label in ((720, 480, "720x480 DVD NTSC"),
+                          (720, 576, "720x576 DVD PAL"),
+                          (640, 480, "640x480"),
+                          (640, 368, "640x368"),
+                          (640, 360, "640x360"),
+                          (576, 324, "576x324"),
+                          (480, 272, "480x272")):
+        fps_here = CORE_HZ / (cpp * rw * rh)
+        print(f"  {label:18s} {rw * rh:7d} px  {fps_here:5.1f} fps  "
+              f"{cpp * rw * rh / CORE_HZ * 1e3:5.2f} ms/frame")
+    print()
+
+    # No projection of what a cache would buy: one was built and measured on
+    # hardware, and it was 33.8 percent slower (core-log entry 26).  The stall
+    # term above is what the SDRAM controller costs as it is, not a call to
+    # remove it.
     return 0
 
 
