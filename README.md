@@ -32,12 +32,14 @@ The core image and the AE350 program are two separate files:
 | `/root/cores/console138k/tinyphosphor.bin` | the FPGA image |
 | `/root/ae350/resident.tpi` | the resident Rockbox player and its codecs |
 | `/root/media/music/` | tracks |
-| `/tang.ini` | which PMOD modules are seated |
+| `/tinytang.ini` | which PMOD modules are seated |
 
-`/tang.ini` must declare the Pmod I2S2 on the socket it is actually in, for
-example `pmod0 = none` and `pmod1 = i2s2`; `tangload` then sends the declaring
-word and the core drives those pins. A missing file leaves both sockets
-released, which is the safe state.
+`/tinytang.ini` must declare the Pmod I2S2 with `layout = lora_i2s2`, which
+puts the LoRa module on PMOD0 and the I2S2 on PMOD1, the socket beside HDMI;
+`tangload` then sends the declaring word and the core drives those pins.
+TinyTang no longer reads the older `pmod0` and `pmod1` keys and refuses the
+`i2s2_oled` layout, so a card written for them plays no sound. A missing file
+leaves both sockets released, which is the safe state.
 
 ## Building
 

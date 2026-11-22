@@ -1019,3 +1019,33 @@ Build for 640x360 at 30 fps and treat the scanout as the one remaining unknown: 
 - User Test: N/A
 
 ---
+
+## 28 COMMIT Unreleased 2026-11-22T10:29:23-07:00
+
+#### Coming From:
+
+Unreleased 8887bd4
+
+#### Purpose:
+
+Correct the README's card instructions, which told the user to declare the Pmod I2S2 in a file and with keys that TinyTang no longer reads, at the operator's request during a documentation pass across the TinyTang ecosystem.
+
+#### Outcome:
+
+The README said `/tang.ini` must declare the Pmod I2S2 as `pmod0 = none` and `pmod1 = i2s2`. TinyTang reads `/tinytang.ini`, and its `ports/bl616/tang_ini.c` answers an old socket key with "no longer read; write layout = lora_i2s2 or vga", so a card set up from this README would have played no sound. The table and the paragraph now name `/tinytang.ini` and `layout = lora_i2s2`, which puts the LoRa module on PMOD0 and the I2S2 on PMOD1 beside HDMI, and say that the old keys and the `i2s2_oled` layout are refused; a missing file still leaves both sockets released. `third_party/rockbox` carries changes that are not this cycle's and is left out of the commit. Nothing was built or deployed. The core-syntax audit was run: `.ai/core.md` and `.ai/core-syntax.md` were re-read, `.ai/core.md` was confirmed unchanged, the complete `.ai/` diff was inspected and holds only this entry, and this entry was validated as number 28 of 100 with six canonical sections in order, a one-sentence Purpose, prose in Outcome and Next Steps, only eligible paths in Files Modified and allowed Status values.
+
+#### Next Steps:
+
+Entry 27's next steps stand.
+
+#### Files Modified:
+
+- README.md
+
+#### Status:
+
+- Build: N/A
+- Deployment: N/A
+- User Test: N/A
+
+---
